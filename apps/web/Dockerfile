@@ -13,6 +13,7 @@ COPY packages/authz/package.json packages/authz/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/fixtures/package.json packages/fixtures/package.json
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 FROM dependencies AS builder
