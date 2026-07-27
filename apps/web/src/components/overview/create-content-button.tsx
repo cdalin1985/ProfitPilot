@@ -42,7 +42,7 @@ export function CreateContentButton(): React.ReactNode {
   return (
     <Dialog
       open={open}
-      onOpenChange={(nextOpen) => {
+      onOpenChange={(nextOpen: boolean) => {
         setOpen(nextOpen);
         if (!nextOpen) {
           setCreated(false);
