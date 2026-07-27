@@ -9,31 +9,29 @@ on:
     - cron: "17 7 * * 1"
 
 permissions:
-  actions: read
   contents: read
-  security-events: write
 
 jobs:
-  codeql:
-    name: CodeQL
+  semgrep:
+    name: Semgrep SAST
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    container:
+      image: semgrep/semgrep:1.171.0@sha256:bdf7013b2c3634a487671158da77c554f531742326b543a9464d2adf6c433ac8
     steps:
       - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-      - uses: github/codeql-action/analyze@v3
+      - run: semgrep scan --config auto --error
 
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    name: Dependency review
+  dependency-audit:
+    name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          fail-on-severity: high
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level moderate
