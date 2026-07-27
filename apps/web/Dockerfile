@@ -18,7 +18,7 @@ RUN pnpm install --frozen-lockfile
 FROM dependencies AS builder
 
 COPY . .
-RUN pnpm --filter @profit-pilot/web build
+RUN pnpm --filter @profit-pilot/web... build
 
 FROM node:24.18.0-bookworm-slim AS runner
 
