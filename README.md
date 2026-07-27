@@ -65,6 +65,12 @@ Production configuration is supplied through the deployment platform and AWS Sec
 - `AUTH_JWKS_URL`
 - `AUTH_ISSUER`
 - `AUTH_AUDIENCE`
+- `WORKOS_CLIENT_ID`
+- `WORKOS_API_KEY`
+- `WORKOS_COOKIE_PASSWORD` (at least 32 random characters)
+- `NEXT_PUBLIC_WORKOS_REDIRECT_URI`
+- `WORKOS_OWNER_ROLE_SLUG`
+- `AUDIT_IP_HASH_KEY` (at least 32 random characters)
 - `DATABASE_URL`
 - `ALLOWED_ORIGINS`
 
@@ -74,7 +80,9 @@ Provider credentials are referenced by secret ARN or secret identifier. They are
 
 The inception milestone is implemented: application shell and review workflows, typed contracts, Fastify security boundary, centralized authorization, PostgreSQL schema and migrations, tenant row-level security, local dependencies, AWS infrastructure foundation, container definitions, CI, dependency scanning, and operational/security documentation.
 
-Production data repositories, live identity, affiliate ingestion, grounded generation, WordPress publication, click attribution, billing, and external observability remain first-vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
+PP-101 organization onboarding is implemented with WorkOS AuthKit, verified-user provisioning, resumable idempotency, local organization/workspace roles, actor- and tenant-scoped row-level security, session refresh, and organization/workspace selection. Production activation still requires the human-owned WorkOS environment and staging checks.
+
+Production overview/content repositories, affiliate ingestion, grounded generation, WordPress publication, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
 ## Delivery rules
 

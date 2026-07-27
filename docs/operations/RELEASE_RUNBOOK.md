@@ -8,6 +8,8 @@
 4. Review the database migration for compatibility with both current and new application versions.
 5. Record the rollout stages, owners, dashboards, alerts, rollback thresholds, and customer communication.
 6. Create or confirm the backup/restore point required by the migration risk class.
+7. For PP-101, prove tenant tables are empty or attach the approved WorkOS identity-linking and workspace-profile backfill plan. A `0004` preflight failure blocks promotion.
+8. Verify the WorkOS callback, sign-in, and logout URIs; email verification; MFA policy; owner-role slug; and environment pairing without exposing secret values.
 
 ## Promotion
 
@@ -15,8 +17,9 @@
 2. Deploy to staging and run smoke and connector reconciliation checks.
 3. Deploy production canary tasks with no more than 5% traffic.
 4. Observe error rate, p95 latency, saturation, queue age, connector failures, publication reconciliation, authentication failures, and tenant-denial anomalies.
-5. Increase traffic only while all release thresholds remain healthy.
-6. Record the deployment, approver, revision, image digests, migration identifiers, and resulting health.
+5. Exercise new-user onboarding, same-key replay after an injected failure, organization selection, workspace selection, session refresh, sign-out, and a cross-workspace denial.
+6. Increase traffic only while all release thresholds remain healthy.
+7. Record the deployment, approver, revision, image digests, migration identifiers, and resulting health.
 
 ## Rollback
 

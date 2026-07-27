@@ -1,26 +1,25 @@
 import type { FastifyRequest } from "fastify";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-import { tenantContextSchema, type TenantContext } from "@profit-pilot/contracts";
+import { authenticatedActorSchema, type AuthenticatedActor } from "@profit-pilot/contracts";
 
 import type { ApiConfig } from "./config.js";
 
-const developmentContext: TenantContext = {
-  organizationId: "018f6d4d-74d4-7c18-a1d4-bb620a63b001",
-  workspaceId: "018f6d4d-74d4-7c18-a1d4-bb620a63b002",
-  userId: "018f6d4d-74d4-7c18-a1d4-bb620a63b003",
-  role: "owner",
+export const developmentActor: AuthenticatedActor = {
+  externalIdentityId: "user_development_owner",
+  identityProviderOrganizationId: "org_development_profit_pilot",
+  sessionId: "session_development",
 };
 
 export interface IdentityProvider {
-  authenticate(request: FastifyRequest): Promise<TenantContext>;
+  authenticate(request: FastifyRequest): Promise<AuthenticatedActor>;
 }
 
 export function createIdentityProvider(config: ApiConfig): IdentityProvider {
   if (config.AUTH_MODE === "development") {
     return {
-      async authenticate(): Promise<TenantContext> {
-        return developmentContext;
+      async authenticate(): Promise<AuthenticatedActor> {
+        return developmentActor;
       },
     };
   }
@@ -35,27 +34,36 @@ export function createIdentityProvider(config: ApiConfig): IdentityProvider {
   const jwks = createRemoteJWKSet(new URL(jwksUrl));
 
   return {
-    async authenticate(request): Promise<TenantContext> {
+    async authenticate(request): Promise<AuthenticatedActor> {
       const authorization = request.headers.authorization;
       if (!authorization?.startsWith("Bearer ")) {
         throw new AuthenticationError("A bearer token is required");
       }
 
-      const token = authorization.slice("Bearer ".length);
-      const { payload } = await jwtVerify(token, jwks, { issuer, audience });
-      return tenantContextSchema.parse({
-        organizationId: payload["org_id"],
-        workspaceId: payload["workspace_id"],
-        userId: payload.sub,
-        role: payload["role"],
-      });
+      try {
+        const token = authorization.slice("Bearer ".length);
+        const { payload } = await jwtVerify(token, jwks, {
+          issuer,
+          audience,
+          algorithms: ["RS256"],
+        });
+        return authenticatedActorSchema.parse({
+          externalIdentityId: payload.sub,
+          identityProviderOrganizationId: payload["org_id"],
+          sessionId: payload.sid,
+        });
+      } catch (error) {
+        throw new AuthenticationError("The bearer token is invalid or expired", {
+          cause: error,
+        });
+      }
     },
   };
 }
 
 export class AuthenticationError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "AuthenticationError";
   }
 }

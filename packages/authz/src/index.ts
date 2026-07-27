@@ -1,4 +1,4 @@
-import type { Role } from "@profit-pilot/contracts";
+import type { OrganizationRole, TenantContext, WorkspaceRole } from "@profit-pilot/contracts";
 
 export const permissions = [
   "organization:manage",
@@ -17,9 +17,11 @@ export const permissions = [
 
 export type Permission = (typeof permissions)[number];
 
-const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
+type AuthorizationContext = Pick<TenantContext, "organizationRole" | "workspaceRole">;
+
+const organizationRolePermissions: Readonly<Record<OrganizationRole, ReadonlySet<Permission>>> = {
   owner: new Set(permissions),
-  admin: new Set([
+  organization_admin: new Set([
     "organization:manage",
     "workspace:manage",
     "members:manage",
@@ -32,6 +34,24 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "analytics:read",
     "audit:read",
   ]),
+  billing_admin: new Set(["billing:manage"]),
+  member: new Set(),
+};
+
+const workspaceRolePermissions: Readonly<Record<WorkspaceRole, ReadonlySet<Permission>>> = {
+  workspace_admin: new Set([
+    "workspace:manage",
+    "members:manage",
+    "connections:manage",
+    "opportunities:read",
+    "content:create",
+    "content:edit",
+    "content:approve",
+    "content:publish",
+    "analytics:read",
+    "audit:read",
+  ]),
+  strategist: new Set(["opportunities:read", "content:create", "content:edit", "analytics:read"]),
   editor: new Set([
     "opportunities:read",
     "content:create",
@@ -40,18 +60,24 @@ const rolePermissions: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "content:publish",
     "analytics:read",
   ]),
+  contributor: new Set(["opportunities:read", "content:create", "content:edit"]),
   analyst: new Set(["opportunities:read", "analytics:read"]),
   client_approver: new Set(["opportunities:read", "content:approve", "analytics:read"]),
   viewer: new Set(["opportunities:read", "analytics:read"]),
 };
 
-export function can(role: Role, permission: Permission): boolean {
-  return rolePermissions[role].has(permission);
+export function can(context: AuthorizationContext, permission: Permission): boolean {
+  return (
+    organizationRolePermissions[context.organizationRole].has(permission) ||
+    (context.workspaceRole
+      ? workspaceRolePermissions[context.workspaceRole].has(permission)
+      : false)
+  );
 }
 
-export function assertCan(role: Role, permission: Permission): void {
-  if (!can(role, permission)) {
-    throw new AuthorizationError(role, permission);
+export function assertCan(context: AuthorizationContext, permission: Permission): void {
+  if (!can(context, permission)) {
+    throw new AuthorizationError(context, permission);
   }
 }
 
@@ -59,11 +85,12 @@ export class AuthorizationError extends Error {
   readonly code = "forbidden";
 
   constructor(
-    readonly role: Role,
+    readonly context: AuthorizationContext,
     readonly permission: Permission,
     detail?: string,
   ) {
-    super(detail ?? `Role ${role} does not grant ${permission}`);
+    const roles = [context.organizationRole, context.workspaceRole].filter(Boolean).join(", ");
+    super(detail ?? `Roles ${roles} do not grant ${permission}`);
     this.name = "AuthorizationError";
   }
 }

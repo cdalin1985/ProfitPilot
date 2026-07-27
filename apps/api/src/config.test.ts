@@ -14,6 +14,8 @@ describe("API configuration", () => {
       AUTH_JWKS_URL: "https://identity.example.com/.well-known/jwks.json",
       AUTH_ISSUER: "https://identity.example.com/",
       AUTH_AUDIENCE: "profit-pilot",
+      WORKOS_API_KEY: "sk_test_example",
+      AUDIT_IP_HASH_KEY: "a-production-secret-with-32-characters",
       ALLOWED_ORIGINS: "https://app.example.com",
       DATABASE_URL: "postgresql://application:secret@database.example.com:5432/profit_pilot",
     });

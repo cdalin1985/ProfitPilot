@@ -1,26 +1,206 @@
+import countries from "i18n-iso-countries";
 import { z } from "zod";
 
 export const identifierSchema = z.string().uuid();
 
-export const roleSchema = z.enum([
+export const organizationRoleSchema = z.enum([
   "owner",
-  "admin",
+  "organization_admin",
+  "billing_admin",
+  "member",
+]);
+
+export type OrganizationRole = z.infer<typeof organizationRoleSchema>;
+
+export const workspaceRoleSchema = z.enum([
+  "workspace_admin",
+  "strategist",
   "editor",
+  "contributor",
   "analyst",
   "client_approver",
   "viewer",
 ]);
 
+export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
+
+export const roleSchema = z.union([organizationRoleSchema, workspaceRoleSchema]);
+
 export type Role = z.infer<typeof roleSchema>;
+
+export const authenticatedActorSchema = z.object({
+  externalIdentityId: z.string().min(1).max(255),
+  identityProviderOrganizationId: z.string().min(1).max(255).optional(),
+  sessionId: z.string().min(1).max(255).optional(),
+});
+
+export type AuthenticatedActor = z.infer<typeof authenticatedActorSchema>;
 
 export const tenantContextSchema = z.object({
   organizationId: identifierSchema,
   workspaceId: identifierSchema,
   userId: identifierSchema,
-  role: roleSchema,
+  organizationRole: organizationRoleSchema,
+  workspaceRole: workspaceRoleSchema.nullable(),
 });
 
 export type TenantContext = z.infer<typeof tenantContextSchema>;
+
+const canonicalLocaleSchema = z
+  .string()
+  .min(2)
+  .max(35)
+  .refine((value) => {
+    try {
+      return Intl.getCanonicalLocales(value).length === 1;
+    } catch {
+      return false;
+    }
+  }, "Enter a valid BCP 47 locale");
+
+const supportedCurrencySchema = z
+  .string()
+  .length(3)
+  .regex(/^[A-Z]{3}$/)
+  .refine(
+    (value) => Intl.supportedValuesOf("currency").includes(value),
+    "Select a supported ISO 4217 currency",
+  );
+
+const supportedTimezoneSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .refine(
+    (value) => value === "UTC" || Intl.supportedValuesOf("timeZone").includes(value),
+    "Select a supported IANA timezone",
+  );
+
+export const workspaceProfileSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  targetCountry: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/)
+    .refine((value) => countries.isValid(value), "Select a valid ISO 3166-1 country"),
+  defaultLanguage: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z]{2,3}$/),
+  locale: canonicalLocaleSchema,
+  currency: supportedCurrencySchema,
+  timezone: supportedTimezoneSchema,
+  niche: z.string().trim().min(2).max(80),
+});
+
+export type WorkspaceProfile = z.infer<typeof workspaceProfileSchema>;
+
+export const createOrganizationWorkspaceSchema = z.object({
+  organizationName: z.string().trim().min(2).max(120),
+  workspace: workspaceProfileSchema,
+});
+
+export type CreateOrganizationWorkspace = z.infer<typeof createOrganizationWorkspaceSchema>;
+
+export const onboardingStepSchema = z.enum([
+  "workspace_profile",
+  "publishing_destination",
+  "affiliate_connection",
+  "brand_policy",
+  "sample_import",
+  "evidence_backed_draft",
+  "destination_draft",
+  "destination_verification",
+  "workspace_activation",
+]);
+
+export type OnboardingStep = z.infer<typeof onboardingStepSchema>;
+
+export const onboardingStepStateSchema = z.enum(["pending", "in_progress", "blocked", "completed"]);
+
+export const onboardingProgressSchema = z.object({
+  status: z.enum(["in_progress", "blocked", "ready_for_activation", "completed"]),
+  currentStep: onboardingStepSchema,
+  steps: z.array(
+    z.object({
+      step: onboardingStepSchema,
+      position: z.number().int().min(1),
+      state: onboardingStepStateSchema,
+      completedAt: z.string().datetime().nullable(),
+    }),
+  ),
+});
+
+export type OnboardingProgress = z.infer<typeof onboardingProgressSchema>;
+
+export const organizationWorkspaceSchema = z.object({
+  organization: z.object({
+    id: identifierSchema,
+    identityProviderOrganizationId: z.string().min(1),
+    name: z.string().min(1),
+    slug: z.string().min(1),
+    role: organizationRoleSchema,
+  }),
+  workspace: workspaceProfileSchema.extend({
+    id: identifierSchema,
+    slug: z.string().min(1),
+    status: z.enum(["setup", "active", "suspended", "archived"]),
+    role: workspaceRoleSchema.nullable(),
+  }),
+  onboarding: onboardingProgressSchema,
+});
+
+export type OrganizationWorkspace = z.infer<typeof organizationWorkspaceSchema>;
+
+export const createOrganizationWorkspaceResponseSchema = organizationWorkspaceSchema.extend({
+  replayed: z.boolean(),
+});
+
+export type CreateOrganizationWorkspaceResponse = z.infer<
+  typeof createOrganizationWorkspaceResponseSchema
+>;
+
+const selectableWorkspaceSchema = z.object({
+  id: identifierSchema,
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  status: z.enum(["setup", "active", "suspended"]),
+});
+
+export const sessionStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("onboarding_required"),
+  }),
+  z.object({
+    status: z.literal("organization_selection_required"),
+    organizations: z.array(
+      z.object({
+        id: identifierSchema,
+        identityProviderOrganizationId: z.string().min(1),
+        name: z.string().min(1),
+      }),
+    ),
+  }),
+  z.object({
+    status: z.literal("workspace_selection_required"),
+    organization: z.object({
+      id: identifierSchema,
+      identityProviderOrganizationId: z.string().min(1),
+      name: z.string().min(1),
+    }),
+    workspaces: z.array(selectableWorkspaceSchema).min(1),
+  }),
+  z.object({
+    status: z.literal("active"),
+    tenant: tenantContextSchema,
+    active: organizationWorkspaceSchema,
+    availableWorkspaces: z.array(selectableWorkspaceSchema),
+  }),
+]);
+
+export type SessionState = z.infer<typeof sessionStateSchema>;
 
 export const opportunityLevelSchema = z.enum(["high", "medium", "low"]);
 export const freshnessTrendSchema = z.enum(["rising", "new", "steady", "falling"]);

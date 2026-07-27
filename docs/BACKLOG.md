@@ -15,7 +15,7 @@
 
 ## First vertical slice
 
-- PP-101: Organization onboarding and workspace creation.
+- PP-101: Organization onboarding and workspace creation. Implemented; production activation remains gated on WorkOS environment configuration and staging verification.
 - PP-102: Awin OAuth/token connection and read-only connection test.
 - PP-103: Awin product-feed ingestion with quota and freshness policy.
 - PP-104: Product normalization and opportunity score v1.

@@ -12,6 +12,12 @@ const configSchema = z
     AUTH_JWKS_URL: z.string().url().optional(),
     AUTH_ISSUER: z.string().url().optional(),
     AUTH_AUDIENCE: z.string().min(1).optional(),
+    WORKOS_API_KEY: z.string().startsWith("sk_").optional(),
+    WORKOS_OWNER_ROLE_SLUG: z
+      .string()
+      .regex(/^[a-z0-9_-]+$/)
+      .default("admin"),
+    AUDIT_IP_HASH_KEY: z.string().min(32).optional(),
     ALLOWED_ORIGINS: z.string().default("http://localhost:3000"),
     DATABASE_URL: z.string().url().optional(),
   })
@@ -25,7 +31,12 @@ const configSchema = z
     }
 
     if (value.AUTH_MODE === "oidc") {
-      for (const key of ["AUTH_JWKS_URL", "AUTH_ISSUER", "AUTH_AUDIENCE"] as const) {
+      for (const key of [
+        "AUTH_JWKS_URL",
+        "AUTH_ISSUER",
+        "AUTH_AUDIENCE",
+        "WORKOS_API_KEY",
+      ] as const) {
         if (!value[key]) {
           context.addIssue({
             code: "custom",
@@ -41,6 +52,14 @@ const configSchema = z
         code: "custom",
         path: ["DATABASE_URL"],
         message: "Production requires DATABASE_URL",
+      });
+    }
+
+    if (value.NODE_ENV === "production" && !value.AUDIT_IP_HASH_KEY) {
+      context.addIssue({
+        code: "custom",
+        path: ["AUDIT_IP_HASH_KEY"],
+        message: "Production requires AUDIT_IP_HASH_KEY",
       });
     }
   });

@@ -15,9 +15,13 @@ import {
 
 import { NavigationList } from "./navigation-list";
 import { ProfitPilotMark } from "./profit-pilot-mark";
-import { WorkspaceSwitcher } from "./workspace-switcher";
+import { WorkspaceSwitcher, type WorkspaceNavigationContext } from "./workspace-switcher";
 
-export function MobileNavigation(): React.ReactNode {
+export function MobileNavigation({
+  workspaceContext,
+}: {
+  workspaceContext: WorkspaceNavigationContext;
+}): React.ReactNode {
   const [open, setOpen] = useState(false);
 
   return (
@@ -44,7 +48,7 @@ export function MobileNavigation(): React.ReactNode {
             <NavigationList kind="support" onNavigate={() => setOpen(false)} />
           </div>
           <div className="mt-4 border-t border-sidebar-border pt-3">
-            <WorkspaceSwitcher inverse />
+            <WorkspaceSwitcher inverse workspaceContext={workspaceContext} />
           </div>
         </div>
       </SheetContent>
