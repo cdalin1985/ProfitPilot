@@ -156,7 +156,10 @@ export function OpportunityTable({ opportunities }: OpportunityTableProps): Reac
           </TableBody>
         </Table>
       </div>
-      <Sheet open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(undefined)}>
+      <Sheet
+        open={Boolean(selected)}
+        onOpenChange={(open: boolean) => !open && setSelected(undefined)}
+      >
         <SheetContent className="sm:max-w-md">
           {selected && (
             <>

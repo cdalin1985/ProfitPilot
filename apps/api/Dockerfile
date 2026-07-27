@@ -13,11 +13,12 @@ COPY packages/authz/package.json packages/authz/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/fixtures/package.json packages/fixtures/package.json
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm --filter @profit-pilot/api... build
-RUN pnpm prune --prod
+RUN pnpm --filter @profit-pilot/api deploy --prod --legacy /prod/api
 
 FROM node:24.18.0-bookworm-slim AS runner
 
@@ -29,11 +30,9 @@ WORKDIR /app
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs api
 
-COPY --from=builder --chown=api:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=api:nodejs /app/apps/api ./apps/api
-COPY --from=builder --chown=api:nodejs /app/packages ./packages
+COPY --from=builder --chown=api:nodejs /prod/api ./
 
 USER api
 EXPOSE 4000
 
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["node", "dist/main.js"]

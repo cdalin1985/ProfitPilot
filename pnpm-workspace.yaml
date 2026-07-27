@@ -7,8 +7,15 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
+blockExoticSubdeps: true
+minimumReleaseAge: 10080
+
 overrides:
-  postcss: 8.5.23
+  "@hono/node-server@<2.0.10": 2.0.10
+  "brace-expansion@<=5.0.7": 5.0.8
+  "esbuild@<=0.24.2": 0.25.12
+  "find-my-way@<=9.6.0": 9.7.0
+  postcss: 8.5.20
   sharp: 0.35.0
 
 catalog:
@@ -20,5 +27,16 @@ catalog:
   "vitest": "4.1.10"
   "zod": "4.4.3"
 
+patchedDependencies:
+  minimatch@3.1.5: patches/minimatch@3.1.5.patch
+
 minimumReleaseAgeExclude:
-  - jsdom@30.0.0
+  - "@next/*"
+  - brace-expansion@5.0.8
+  - eslint-config-next@16.2.12
+  - find-my-way@9.7.0
+  - next@16.2.12
+
+trustPolicy: no-downgrade
+
+trustPolicyIgnoreAfter: 10080

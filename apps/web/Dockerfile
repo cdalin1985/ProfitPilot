@@ -13,12 +13,13 @@ COPY packages/authz/package.json packages/authz/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/fixtures/package.json packages/fixtures/package.json
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 FROM dependencies AS builder
 
 COPY . .
-RUN pnpm --filter @profit-pilot/web build
+RUN pnpm --filter @profit-pilot/web... build
 
 FROM node:24.18.0-bookworm-slim AS runner
 
