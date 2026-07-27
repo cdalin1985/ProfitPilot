@@ -1,0 +1,38 @@
+name: profit-pilot
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: profit_pilot
+      POSTGRES_PASSWORD: profit_pilot_admin_local
+      POSTGRES_USER: profit_pilot_admin
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U profit_pilot_admin -d profit_pilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+    volumes:
+      - ./scripts/postgres/init.sql:/docker-entrypoint-initdb.d/001-roles.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:

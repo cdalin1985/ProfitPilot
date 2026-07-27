@@ -1,0 +1,33 @@
+{
+  "name": "@profit-pilot/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "test": "vitest run src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.3.0",
+    "@fastify/helmet": "13.1.0",
+    "@fastify/rate-limit": "11.1.0",
+    "@fastify/sensible": "6.0.4",
+    "@profit-pilot/authz": "workspace:*",
+    "@profit-pilot/contracts": "workspace:*",
+    "@profit-pilot/db": "workspace:*",
+    "@profit-pilot/fixtures": "workspace:*",
+    "fastify": "5.10.0",
+    "jose": "6.1.2",
+    "pino": "10.3.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

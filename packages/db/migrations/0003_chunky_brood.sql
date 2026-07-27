@@ -1,0 +1,1 @@
+ALTER TABLE "content_items" ADD CONSTRAINT "content_items_current_revision_id_content_revisions_id_fk" FOREIGN KEY ("current_revision_id") REFERENCES "public"."content_revisions"("id") ON DELETE set null ON UPDATE no action;

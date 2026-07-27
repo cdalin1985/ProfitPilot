@@ -1,0 +1,35 @@
+{
+  "name": "@profit-pilot/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src",
+    "test:integration": "vitest run src/tenant.integration.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@profit-pilot/contracts": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "postgres": "catalog:"
+  },
+  "devDependencies": {
+    "drizzle-kit": "0.31.10",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

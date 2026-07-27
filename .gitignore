@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.next
+.turbo
+coverage
+dist
+node_modules
+playwright-report
+test-results
+*.log
+*.tsbuildinfo
+
+# Local infrastructure state and credentials
+*.tfstate
+*.tfstate.*
+.terraform
+
+# Generated local data
+.data
