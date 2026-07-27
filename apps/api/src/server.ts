@@ -3,24 +3,36 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import Fastify, { type FastifyInstance } from "fastify";
+import { ZodError } from "zod";
 
 import { assertCan, AuthorizationError } from "@profit-pilot/authz";
-import { identifierSchema } from "@profit-pilot/contracts";
+import { createOrganizationWorkspaceSchema, identifierSchema } from "@profit-pilot/contracts";
 import { checkDatabaseReady, closeDatabase } from "@profit-pilot/db";
 import { developmentContentReview, developmentOverview } from "@profit-pilot/fixtures";
 
+import {
+  ApplicationDependencyError,
+  createApplicationServices,
+  IdempotencyConflictError,
+  OnboardingStateError,
+  TenantResolutionError,
+  type ApplicationServices,
+} from "./application-services.js";
 import type { ApiConfig } from "./config.js";
+import { IdentityProvisioningError } from "./identity-admin.js";
 import { AuthenticationError, createIdentityProvider, type IdentityProvider } from "./identity.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
   identityProvider?: IdentityProvider;
+  services?: ApplicationServices;
   readinessProbe?: () => Promise<void>;
 }
 
 export async function buildServer({
   config,
   identityProvider = createIdentityProvider(config),
+  services = createApplicationServices(config),
   readinessProbe = config.DATABASE_URL ? checkDatabaseReady : async () => undefined,
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
@@ -78,6 +90,65 @@ export async function buildServer({
         title: "Insufficient permission",
         status: 403,
         detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof TenantResolutionError) {
+      request.log.warn({ err: error }, "tenant resolution failed");
+      return reply.status(403).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/tenant-access-denied",
+        title: "Tenant access denied",
+        status: 403,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof IdempotencyConflictError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/idempotency-conflict",
+        title: "Idempotency conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof OnboardingStateError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/onboarding-state-conflict",
+        title: "Onboarding cannot continue",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof IdentityProvisioningError || error instanceof ApplicationDependencyError) {
+      request.log.error({ err: error }, "onboarding dependency unavailable");
+      return reply.status(503).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/dependency-unavailable",
+        title: "A required service is unavailable",
+        status: 503,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof ZodError) {
+      const errors: Record<string, string[]> = {};
+      for (const issue of error.issues) {
+        const field = issue.path.join(".") || "request";
+        errors[field] = [...(errors[field] ?? []), issue.message];
+      }
+      request.log.warn({ validationIssues: error.issues }, "request validation failed");
+      return reply.status(422).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/invalid-request",
+        title: "Invalid request",
+        status: 422,
+        detail: "Correct the highlighted fields and try again.",
+        errors,
         requestId: request.id,
       });
     }
@@ -140,23 +211,52 @@ export async function buildServer({
   });
 
   server.get("/v1/session", async (request) => {
-    const context = await identityProvider.authenticate(request);
-    return context;
+    const actor = await identityProvider.authenticate(request);
+    const requestedWorkspaceHeader = request.headers["x-workspace-id"];
+    const requestedWorkspaceId =
+      typeof requestedWorkspaceHeader === "string"
+        ? identifierSchema.parse(requestedWorkspaceHeader)
+        : undefined;
+    return services.getSession(actor, requestedWorkspaceId);
   });
+
+  server.post(
+    "/v1/onboarding/organization-workspace",
+    {
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: "1 hour",
+        },
+      },
+    },
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const idempotencyHeader = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
+      );
+      const input = createOrganizationWorkspaceSchema.parse(request.body);
+      const result = await services.createOrganizationWorkspace(actor, input, {
+        idempotencyKey,
+        requestId: request.id,
+        sourceIp: request.ip,
+      });
+
+      return reply
+        .status(result.replayed ? 200 : 201)
+        .header("location", `/v1/workspaces/${result.workspace.id}`)
+        .send(result);
+    },
+  );
 
   server.get<{ Params: { workspaceId: string } }>(
     "/v1/workspaces/:workspaceId/overview",
     async (request, reply) => {
-      const context = await identityProvider.authenticate(request);
+      const actor = await identityProvider.authenticate(request);
       const workspaceId = identifierSchema.parse(request.params.workspaceId);
-      if (context.workspaceId !== workspaceId) {
-        throw new AuthorizationError(
-          context.role,
-          "opportunities:read",
-          "The requested workspace is outside the authenticated tenant context",
-        );
-      }
-      assertCan(context.role, "opportunities:read");
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "opportunities:read");
 
       if (config.NODE_ENV === "production") {
         return reply.status(501).type("application/problem+json").send({
@@ -174,9 +274,14 @@ export async function buildServer({
   server.get<{ Params: { contentId: string } }>(
     "/v1/content/:contentId",
     async (request, reply) => {
-      const context = await identityProvider.authenticate(request);
+      const actor = await identityProvider.authenticate(request);
       identifierSchema.parse(request.params.contentId);
-      assertCan(context.role, "content:edit");
+      const workspaceHeader = request.headers["x-workspace-id"];
+      const workspaceId = identifierSchema.parse(
+        typeof workspaceHeader === "string" ? workspaceHeader : undefined,
+      );
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:edit");
 
       if (config.NODE_ENV === "production") {
         return reply.status(501).type("application/problem+json").send({

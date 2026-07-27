@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { opportunitySchema, problemDetailsSchema } from "./index.js";
+import {
+  createOrganizationWorkspaceSchema,
+  opportunitySchema,
+  problemDetailsSchema,
+  tenantContextSchema,
+} from "./index.js";
 
 describe("public contracts", () => {
   it("rejects opportunity scores outside the supported range", () => {
@@ -28,5 +33,89 @@ describe("public contracts", () => {
         requestId: "request-123",
       }),
     ).toMatchObject({ status: 403, requestId: "request-123" });
+  });
+
+  it("validates an explicit organization and workspace profile", () => {
+    expect(
+      createOrganizationWorkspaceSchema.parse({
+        organizationName: "Northstar Media",
+        workspace: {
+          name: "US Editorial",
+          targetCountry: "us",
+          defaultLanguage: "EN",
+          locale: "en-US",
+          currency: "USD",
+          timezone: "America/Denver",
+          niche: "Consumer technology",
+        },
+      }),
+    ).toMatchObject({
+      organizationName: "Northstar Media",
+      workspace: {
+        targetCountry: "US",
+        defaultLanguage: "en",
+      },
+    });
+  });
+
+  it("rejects unsupported currency and timezone values", () => {
+    expect(() =>
+      createOrganizationWorkspaceSchema.parse({
+        organizationName: "Northstar Media",
+        workspace: {
+          name: "US Editorial",
+          targetCountry: "US",
+          defaultLanguage: "en",
+          locale: "en-US",
+          currency: "ZZZ",
+          timezone: "Mars/Olympus",
+          niche: "Consumer technology",
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects invented country codes and accepts UTC", () => {
+    expect(() =>
+      createOrganizationWorkspaceSchema.parse({
+        organizationName: "Northstar Media",
+        workspace: {
+          name: "Global Editorial",
+          targetCountry: "ZZ",
+          defaultLanguage: "en",
+          locale: "en-US",
+          currency: "USD",
+          timezone: "UTC",
+          niche: "Consumer technology",
+        },
+      }),
+    ).toThrow();
+
+    expect(
+      createOrganizationWorkspaceSchema.parse({
+        organizationName: "Northstar Media",
+        workspace: {
+          name: "Global Editorial",
+          targetCountry: "US",
+          defaultLanguage: "en",
+          locale: "en-US",
+          currency: "USD",
+          timezone: "UTC",
+          niche: "Consumer technology",
+        },
+      }).workspace.timezone,
+    ).toBe("UTC");
+  });
+
+  it("keeps organization and workspace roles distinct in tenant context", () => {
+    expect(() =>
+      tenantContextSchema.parse({
+        organizationId: "018f6d4d-74d4-7c18-a1d4-bb620a63b001",
+        workspaceId: "018f6d4d-74d4-7c18-a1d4-bb620a63b002",
+        userId: "018f6d4d-74d4-7c18-a1d4-bb620a63b003",
+        organizationRole: "editor",
+        workspaceRole: null,
+      }),
+    ).toThrow();
   });
 });

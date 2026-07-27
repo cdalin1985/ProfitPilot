@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
+import { AuthenticationProvider } from "@/components/authentication-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
@@ -34,11 +35,15 @@ export const viewport: Viewport = {
   themeColor: "#071c2f",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
-        <TooltipProvider>{children}</TooltipProvider>
+        <AuthenticationProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </AuthenticationProvider>
       </body>
     </html>
   );

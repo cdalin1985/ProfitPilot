@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "i18n-iso-countries": "7.14.0",
     "zod": "catalog:"
   },
   "devDependencies": {

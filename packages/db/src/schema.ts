@@ -21,13 +21,66 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 };
 
-export const membershipRole = pgEnum("membership_role", [
+export const organizationMembershipRole = pgEnum("membership_role", [
   "owner",
   "admin",
   "editor",
   "analyst",
   "client_approver",
   "viewer",
+  "organization_admin",
+  "billing_admin",
+  "member",
+]);
+
+export const workspaceMembershipRole = pgEnum("workspace_membership_role", [
+  "workspace_admin",
+  "strategist",
+  "editor",
+  "contributor",
+  "analyst",
+  "client_approver",
+  "viewer",
+]);
+
+export const membershipStatus = pgEnum("membership_status", ["active", "inactive"]);
+
+export const organizationStatus = pgEnum("organization_status", [
+  "active",
+  "archived",
+  "pending_deletion",
+]);
+
+export const workspaceStatus = pgEnum("workspace_status", [
+  "setup",
+  "active",
+  "suspended",
+  "archived",
+]);
+
+export const onboardingStep = pgEnum("onboarding_step", [
+  "workspace_profile",
+  "publishing_destination",
+  "affiliate_connection",
+  "brand_policy",
+  "sample_import",
+  "evidence_backed_draft",
+  "destination_draft",
+  "destination_verification",
+  "workspace_activation",
+]);
+
+export const onboardingStepState = pgEnum("onboarding_step_state", [
+  "pending",
+  "in_progress",
+  "blocked",
+  "completed",
+]);
+
+export const onboardingRequestStatus = pgEnum("onboarding_request_status", [
+  "pending",
+  "completed",
+  "failed",
 ]);
 
 export const connectionStatus = pgEnum("connection_status", [
@@ -85,12 +138,21 @@ export const organizations = pgTable(
   "organizations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    identityProviderOrganizationId: text("identity_provider_organization_id").notNull(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    status: organizationStatus("status").notNull().default("active"),
     billingCustomerId: text("billing_customer_id"),
+    createdByUserId: uuid("created_by_user_id").references((): AnyPgColumn => users.id, {
+      onDelete: "set null",
+    }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
-  (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)],
+  (table) => [
+    uniqueIndex("organizations_slug_unique").on(table.slug),
+    uniqueIndex("organizations_identity_provider_unique").on(table.identityProviderOrganizationId),
+  ],
 );
 
 export const workspaces = pgTable(
@@ -102,14 +164,22 @@ export const workspaces = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
+    targetCountry: text("target_country").notNull(),
+    defaultLanguage: text("default_language").notNull(),
     locale: text("locale").notNull(),
     currency: text("currency").notNull(),
     timezone: text("timezone").notNull(),
+    niche: text("niche").notNull(),
+    status: workspaceStatus("status").notNull().default("setup"),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("workspaces_organization_slug_unique").on(table.organizationId, table.slug),
     index("workspaces_organization_id_idx").on(table.organizationId),
+    check("workspaces_target_country_check", sql`${table.targetCountry} ~ '^[A-Z]{2}$'`),
+    check("workspaces_default_language_check", sql`${table.defaultLanguage} ~ '^[a-z]{2,3}$'`),
     check("workspaces_currency_iso_check", sql`${table.currency} ~ '^[A-Z]{3}$'`),
   ],
 );
@@ -121,7 +191,10 @@ export const users = pgTable(
     externalIdentityId: text("external_identity_id").notNull(),
     email: text("email").notNull(),
     displayName: text("display_name").notNull(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    profilePictureUrl: text("profile_picture_url"),
     disabled: boolean("disabled").notNull().default(false),
+    lastAuthenticatedAt: timestamp("last_authenticated_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
@@ -139,12 +212,94 @@ export const memberships = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: membershipRole("role").notNull(),
+    identityProviderMembershipId: text("identity_provider_membership_id"),
+    role: organizationMembershipRole("role").notNull(),
+    status: membershipStatus("status").notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.organizationId, table.userId] }),
     index("memberships_user_id_idx").on(table.userId),
+    uniqueIndex("memberships_identity_provider_unique").on(table.identityProviderMembershipId),
+    check(
+      "memberships_organization_role_check",
+      sql`${table.role} in ('owner', 'organization_admin', 'billing_admin', 'member')`,
+    ),
+  ],
+);
+
+export const workspaceMemberships = pgTable(
+  "workspace_memberships",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: workspaceMembershipRole("role").notNull(),
+    status: membershipStatus("status").notNull().default("active"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.userId] }),
+    index("workspace_memberships_organization_user_idx").on(table.organizationId, table.userId),
+  ],
+);
+
+export const workspaceOnboardingSteps = pgTable(
+  "workspace_onboarding_steps",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    step: onboardingStep("step").notNull(),
+    position: integer("position").notNull(),
+    state: onboardingStepState("state").notNull().default("pending"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    blockedReason: text("blocked_reason"),
+    evidence: jsonb("evidence")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.step] }),
+    uniqueIndex("workspace_onboarding_position_unique").on(table.workspaceId, table.position),
+    index("workspace_onboarding_tenant_idx").on(table.organizationId, table.workspaceId),
+    check("workspace_onboarding_position_positive", sql`${table.position} > 0`),
+  ],
+);
+
+export const onboardingRequests = pgTable(
+  "onboarding_requests",
+  {
+    idempotencyKey: uuid("idempotency_key").primaryKey(),
+    externalIdentityId: text("external_identity_id").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    organizationId: uuid("organization_id").notNull(),
+    workspaceId: uuid("workspace_id").notNull(),
+    identityProviderOrganizationId: text("identity_provider_organization_id"),
+    identityProviderMembershipId: text("identity_provider_membership_id"),
+    status: onboardingRequestStatus("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("onboarding_requests_actor_time_idx").on(table.externalIdentityId, table.createdAt),
+    uniqueIndex("onboarding_requests_organization_unique").on(table.organizationId),
+    uniqueIndex("onboarding_requests_workspace_unique").on(table.workspaceId),
+    check("onboarding_requests_attempt_count_nonnegative", sql`${table.attemptCount} >= 0`),
   ],
 );
 

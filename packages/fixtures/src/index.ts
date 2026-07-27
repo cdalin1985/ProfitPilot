@@ -1,7 +1,71 @@
-import type { ContentReview, Overview } from "@profit-pilot/contracts";
+import type { ContentReview, Overview, SessionState, TenantContext } from "@profit-pilot/contracts";
 
 export const fixtureWorkspaceId = "018f6d4d-74d4-7c18-a1d4-bb620a63b002";
 export const fixtureContentId = "018f6d4d-74d4-7c18-a1d4-bb620a63b201";
+const developmentOnboardingSteps = [
+  "workspace_profile",
+  "publishing_destination",
+  "affiliate_connection",
+  "brand_policy",
+  "sample_import",
+  "evidence_backed_draft",
+  "destination_draft",
+  "destination_verification",
+  "workspace_activation",
+] as const;
+
+export const developmentTenantContext: TenantContext = {
+  organizationId: "018f6d4d-74d4-7c18-a1d4-bb620a63b001",
+  workspaceId: fixtureWorkspaceId,
+  userId: "018f6d4d-74d4-7c18-a1d4-bb620a63b003",
+  organizationRole: "owner",
+  workspaceRole: "workspace_admin",
+};
+
+export const developmentSession: Extract<SessionState, { status: "active" }> = {
+  status: "active",
+  tenant: developmentTenantContext,
+  active: {
+    organization: {
+      id: developmentTenantContext.organizationId,
+      identityProviderOrganizationId: "org_development_profit_pilot",
+      name: "Northstar Media",
+      slug: "northstar-media",
+      role: "owner",
+    },
+    workspace: {
+      id: developmentTenantContext.workspaceId,
+      name: "US Editorial",
+      slug: "us-editorial",
+      targetCountry: "US",
+      defaultLanguage: "en",
+      locale: "en-US",
+      currency: "USD",
+      timezone: "America/New_York",
+      niche: "Consumer technology",
+      status: "active",
+      role: "workspace_admin",
+    },
+    onboarding: {
+      status: "completed",
+      currentStep: "workspace_activation",
+      steps: developmentOnboardingSteps.map((step, index) => ({
+        step,
+        position: index + 1,
+        state: "completed",
+        completedAt: "2026-07-27T00:00:00.000Z",
+      })),
+    },
+  },
+  availableWorkspaces: [
+    {
+      id: developmentTenantContext.workspaceId,
+      name: "US Editorial",
+      slug: "us-editorial",
+      status: "active",
+    },
+  ],
+};
 
 export const developmentOverview: Overview = {
   metrics: {

@@ -1,10 +1,10 @@
 "use client";
 
-import { Bell, ChevronDown } from "lucide-react";
+import { ChevronDown, LogOut } from "lucide-react";
 import Link from "next/link";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { signOutAction } from "@/app/session-actions";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,65 +13,60 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { WebUser } from "@/lib/auth";
 
 import { MobileNavigation } from "./mobile-navigation";
-import { WorkspaceSwitcher } from "./workspace-switcher";
+import { WorkspaceSwitcher, type WorkspaceNavigationContext } from "./workspace-switcher";
 
-export function AppHeader(): React.ReactNode {
+export function AppHeader({
+  workspaceContext,
+  user,
+}: {
+  workspaceContext: WorkspaceNavigationContext;
+  user: WebUser;
+}): React.ReactNode {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center border-b bg-background px-4 sm:px-6 xl:px-8">
       <div className="flex items-center gap-2 xl:hidden">
-        <MobileNavigation />
+        <MobileNavigation workspaceContext={workspaceContext} />
         <div className="hidden min-w-56 sm:block">
-          <WorkspaceSwitcher />
+          <WorkspaceSwitcher workspaceContext={workspaceContext} />
         </div>
       </div>
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label="Notifications, 3 unread"
-              className="relative"
-              size="icon"
-              variant="ghost"
-            >
-              <Bell aria-hidden="true" className="size-5" />
-              <span className="absolute right-2 top-1.5 size-2 rounded-full bg-primary ring-2 ring-background" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/content">2 content items need review</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/integrations">Awin connection requires an account</Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/integrations">WordPress destination requires an account</Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <div className="h-7 w-px bg-border" aria-hidden="true" />
-        <DropdownMenu>
           <DropdownMenuTrigger className="focus-outline flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-muted">
             <Avatar className="size-8">
+              {user.profilePictureUrl && <AvatarImage alt="" src={user.profilePictureUrl} />}
               <AvatarFallback className="bg-foreground text-[11px] font-semibold text-background">
-                CM
+                {user.initials}
               </AvatarFallback>
             </Avatar>
-            <span className="hidden text-sm font-medium sm:inline">Casey Morgan</span>
+            <span className="hidden text-sm font-medium sm:inline">{user.displayName}</span>
             <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>Casey Morgan</DropdownMenuLabel>
+            <DropdownMenuLabel>
+              <span className="block">{user.displayName}</span>
+              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                {user.email}
+              </span>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/settings">Profile</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/settings">Security</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <form action={signOutAction} className="w-full">
+                <button className="flex w-full items-center gap-2 text-left" type="submit">
+                  <LogOut aria-hidden="true" className="size-4" />
+                  Sign out
+                </button>
+              </form>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

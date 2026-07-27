@@ -10,7 +10,9 @@ The platform requires SSO compatibility and centralized authentication without c
 ## Decision
 
 - Production accepts standards-based OIDC JWTs using a configured issuer, audience, and remote JWKS.
-- WorkOS is the initial managed identity provider, but domain code depends only on verified claims.
+- WorkOS AuthKit is the initial managed identity provider and owns authentication, verified email state, MFA policy, sessions, organizations, and external organization memberships.
+- Access tokens establish only the external user, current WorkOS organization, and session. Token roles, workspace IDs, permissions, and request-body tenant fields are never application authorization inputs.
+- PostgreSQL resolves the WorkOS user and organization to active local organization and workspace memberships on every tenant request.
 - Application roles and permissions live in `@profit-pilot/authz`.
 - Proxy or middleware may improve navigation but is never the sole authorization gate.
 - Development identity is available only outside production and uses a fixed, documented tenant context.
@@ -19,4 +21,5 @@ The platform requires SSO compatibility and centralized authentication without c
 
 - Switching identity providers does not rewrite the permission model.
 - OIDC claims must map to an active local membership before customer data is returned.
-- Production startup fails when OIDC configuration is incomplete.
+- Organization owners and administrators require verified WorkOS email and the production WorkOS MFA policy.
+- Production requests fail closed when OIDC, WorkOS administration, encrypted-cookie, audit-HMAC, or database configuration is incomplete.

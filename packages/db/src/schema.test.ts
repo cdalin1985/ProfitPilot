@@ -7,9 +7,12 @@ import {
   contentItems,
   contentRevisions,
   evidenceRecords,
+  onboardingRequests,
   opportunities,
   products,
   publications,
+  workspaceMemberships,
+  workspaceOnboardingSteps,
 } from "./schema.js";
 
 describe("tenant-owned database tables", () => {
@@ -22,7 +25,14 @@ describe("tenant-owned database tables", () => {
     ["evidenceRecords", evidenceRecords],
     ["publications", publications],
     ["auditEvents", auditEvents],
+    ["workspaceMemberships", workspaceMemberships],
+    ["workspaceOnboardingSteps", workspaceOnboardingSteps],
   ])("%s carries an organization boundary", (_name, table) => {
     expect(getTableColumns(table)).toHaveProperty("organizationId");
+  });
+
+  it("keeps pre-tenant onboarding requests scoped to an authenticated identity", () => {
+    expect(getTableColumns(onboardingRequests)).toHaveProperty("externalIdentityId");
+    expect(getTableColumns(onboardingRequests)).toHaveProperty("idempotencyKey");
   });
 });
