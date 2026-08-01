@@ -40,7 +40,7 @@ Create separate WorkOS environments for development/staging and production. In e
 3. Keep the built-in or configured organization owner role slug aligned with `WORKOS_OWNER_ROLE_SLUG`.
 4. Store `WORKOS_API_KEY`, `WORKOS_COOKIE_PASSWORD`, and the audit IP HMAC key only in the environment secret manager.
 5. Set the cookie password to a randomly generated value of at least 32 characters. Do not share a cookie domain across unrelated applications.
-6. Configure the API with the WorkOS issuer, audience, and JWKS URL for the same environment as the web application.
+6. Configure the WorkOS JWT template to emit `{"aud":"urn:profit-pilot:control-plane"}`. Configure the API with that exact audience, the WorkOS issuer, and the application-specific JWKS URL for the same environment as the web application. WorkOS AuthKit access tokens do not include `aud` unless it is added through the JWT template.
 
 Required application configuration:
 

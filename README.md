@@ -44,6 +44,8 @@ The web application listens on `http://localhost:3000`; the API listens on `http
 
 Local authentication is a deliberate development mode with one fixed tenant context. `NODE_ENV=production` rejects `AUTH_MODE=development`.
 
+The root `dev` command loads the ignored root `.env` with Node's native environment-file support and Turbo passes only the documented variables to each service. To exercise the real WorkOS staging boundary locally, follow [WorkOS staging activation](docs/operations/WORKOS_STAGING.md); do not paste credentials into chat or commit `.env`.
+
 For the exact ownership handoff and account-dependent sequence, use [Start here](docs/operations/START_HERE.md).
 
 ## Verification
@@ -64,7 +66,7 @@ Production configuration is supplied through the deployment platform and AWS Sec
 - `AUTH_MODE=oidc`
 - `AUTH_JWKS_URL`
 - `AUTH_ISSUER`
-- `AUTH_AUDIENCE`
+- `AUTH_AUDIENCE` (`urn:profit-pilot:control-plane`; emitted by the WorkOS JWT template)
 - `WORKOS_CLIENT_ID`
 - `WORKOS_API_KEY`
 - `WORKOS_COOKIE_PASSWORD` (at least 32 random characters)
