@@ -5,7 +5,7 @@ param(
   [string]$ClientId,
 
   [Parameter(DontShow = $true)]
-  [securestring]$ApiKey
+  [securestring]$ProvidedApiKey
 )
 
 $ErrorActionPreference = 'Stop'
@@ -85,20 +85,21 @@ Set-EnvironmentValue -Name 'NEXT_PUBLIC_WORKOS_REDIRECT_URI' -Value 'http://loca
 Set-EnvironmentValue -Name 'WORKOS_OWNER_ROLE_SLUG' -Value 'admin'
 
 if ([string]::IsNullOrWhiteSpace((Get-EnvironmentValue -Name 'WORKOS_API_KEY'))) {
-  if ($null -eq $ApiKey) {
-    $ApiKey = Read-Host 'Paste the WorkOS staging API key' -AsSecureString
+  if ($null -eq $ProvidedApiKey) {
+    $ProvidedApiKey = Read-Host 'Paste the WorkOS staging API key' -AsSecureString
   }
   $apiKeyPointer = [IntPtr]::Zero
+  $apiKeyPlaintext = $null
   try {
-    $apiKeyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ApiKey)
-    $apiKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($apiKeyPointer)
-    if ($apiKey -notmatch '^sk_') {
+    $apiKeyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ProvidedApiKey)
+    $apiKeyPlaintext = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($apiKeyPointer)
+    if ($apiKeyPlaintext -notmatch '^sk_') {
       throw 'The WorkOS API key must start with sk_'
     }
-    Set-EnvironmentValue -Name 'WORKOS_API_KEY' -Value $apiKey
+    Set-EnvironmentValue -Name 'WORKOS_API_KEY' -Value $apiKeyPlaintext
   }
   finally {
-    $apiKey = $null
+    $apiKeyPlaintext = $null
     if ($apiKeyPointer -ne [IntPtr]::Zero) {
       [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($apiKeyPointer)
     }

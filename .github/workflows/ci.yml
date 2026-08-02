@@ -25,6 +25,9 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Test WorkOS staging configuration helper
+        shell: pwsh
+        run: ./scripts/test-configure-workos-staging.ps1
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
