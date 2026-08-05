@@ -275,6 +275,7 @@ export const evidenceSchema = z.object({
 
 export const contentReviewSchema = z.object({
   id: identifierSchema,
+  revisionId: identifierSchema,
   title: z.string().min(1).max(240),
   status: z.enum(["draft", "validating", "in_review", "changes_requested", "approved"]),
   revision: z.number().int().positive(),
@@ -292,6 +293,31 @@ export const contentReviewSchema = z.object({
 });
 
 export type ContentReview = z.infer<typeof contentReviewSchema>;
+
+export const requestContentChangesSchema = z.object({
+  revisionId: identifierSchema,
+  summary: z.string().trim().min(10).max(2_000),
+  requiredChanges: z.array(z.string().trim().min(3).max(500)).min(1).max(10),
+});
+
+export const approveContentRevisionSchema = z.object({
+  revisionId: identifierSchema,
+  note: z.string().trim().max(1_000).optional(),
+});
+
+export const contentReviewActionResponseSchema = z.object({
+  contentId: identifierSchema,
+  revisionId: identifierSchema,
+  actionId: identifierSchema,
+  action: z.enum(["changes_requested", "approved"]),
+  status: z.enum(["changes_requested", "approved"]),
+  actedAt: z.string().datetime(),
+  replayed: z.boolean(),
+});
+
+export type RequestContentChanges = z.infer<typeof requestContentChangesSchema>;
+export type ApproveContentRevision = z.infer<typeof approveContentRevisionSchema>;
+export type ContentReviewActionResponse = z.infer<typeof contentReviewActionResponseSchema>;
 
 export const problemDetailsSchema = z.object({
   type: z.string().url(),

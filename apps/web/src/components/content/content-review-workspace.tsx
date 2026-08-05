@@ -6,6 +6,11 @@ import { useState } from "react";
 
 import type { ContentReview } from "@profit-pilot/contracts";
 
+import {
+  approveContentAction,
+  requestContentChangesAction,
+} from "@/app/(app)/content/[contentId]/actions";
+
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -23,20 +28,54 @@ import { ReviewInspector } from "./review-inspector";
 import { WorkflowStepper } from "./workflow-stepper";
 
 interface ContentReviewWorkspaceProps {
+  canReview: boolean;
   content: ContentReview;
 }
 
-type LocalStatus = "in_review" | "changes_requested" | "approved";
-
-export function ContentReviewWorkspace({ content }: ContentReviewWorkspaceProps): React.ReactNode {
-  const [status, setStatus] = useState<LocalStatus>("in_review");
+export function ContentReviewWorkspace({
+  canReview,
+  content,
+}: ContentReviewWorkspaceProps): React.ReactNode {
+  const [status, setStatus] = useState(content.status);
+  const [pending, setPending] = useState(false);
+  const [actionError, setActionError] = useState<string>();
   const approved = status === "approved";
+  const actionable = canReview && status === "in_review" && !pending;
 
-  const statusLabel: Record<LocalStatus, string> = {
+  const statusLabel: Record<ContentReview["status"], string> = {
+    draft: "Draft",
+    validating: "Validating",
     in_review: "In review",
     changes_requested: "Changes requested",
     approved: "Approved",
   };
+
+  async function approve(): Promise<void> {
+    setPending(true);
+    setActionError(undefined);
+    const result = await approveContentAction(content.id, content.revisionId, crypto.randomUUID());
+    setPending(false);
+    if (result.ok && result.status) setStatus(result.status);
+    else setActionError(result.message);
+  }
+
+  async function requestChanges(reason: string): Promise<boolean> {
+    setPending(true);
+    setActionError(undefined);
+    const result = await requestContentChangesAction(
+      content.id,
+      content.revisionId,
+      reason,
+      crypto.randomUUID(),
+    );
+    setPending(false);
+    if (result.ok && result.status) {
+      setStatus(result.status);
+      return true;
+    }
+    setActionError(result.message);
+    return false;
+  }
 
   return (
     <main className="min-h-[calc(100vh-4rem)]">
@@ -84,19 +123,26 @@ export function ContentReviewWorkspace({ content }: ContentReviewWorkspaceProps)
                 <ReviewInspector approved={approved} content={content} />
               </SheetContent>
             </Sheet>
-            <RequestChangesDialog onSubmit={() => setStatus("changes_requested")} />
-            <Button disabled={approved} onClick={() => setStatus("approved")}>
+            <RequestChangesDialog disabled={!actionable} onSubmit={requestChanges} />
+            <Button disabled={!actionable} onClick={approve}>
               {approved ? (
                 <>
                   <CheckCircle2 aria-hidden="true" className="size-4" />
                   Approved
                 </>
+              ) : pending ? (
+                "Approving…"
               ) : (
                 "Approve"
               )}
             </Button>
           </div>
         </div>
+        {actionError ? (
+          <p className="mt-3 text-sm text-destructive" role="alert">
+            {actionError}
+          </p>
+        ) : null}
       </header>
       <div className="scrollbar-subtle overflow-x-auto border-b">
         <WorkflowStepper current={approved ? "approved" : "review"} />

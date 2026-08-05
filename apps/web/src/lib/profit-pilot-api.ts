@@ -2,10 +2,16 @@ import "server-only";
 
 import {
   createOrganizationWorkspaceResponseSchema,
+  contentReviewActionResponseSchema,
+  contentReviewSchema,
   problemDetailsSchema,
   sessionStateSchema,
   type CreateOrganizationWorkspace,
   type CreateOrganizationWorkspaceResponse,
+  type ApproveContentRevision,
+  type ContentReview,
+  type ContentReviewActionResponse,
+  type RequestContentChanges,
   type ProblemDetails,
   type SessionState,
 } from "@profit-pilot/contracts";
@@ -98,4 +104,84 @@ export async function createOrganizationWorkspace(
     body: JSON.stringify(input),
   });
   return createOrganizationWorkspaceResponseSchema.parse(await response.json());
+}
+
+export async function getContentReview(
+  auth: WebAuth,
+  workspaceId: string,
+  contentId: string,
+): Promise<ContentReview | undefined> {
+  if (getWebAuthMode() === "development") {
+    const { developmentContentReview } = await import("@profit-pilot/fixtures");
+    return contentId === developmentContentReview.id
+      ? contentReviewSchema.parse(developmentContentReview)
+      : undefined;
+  }
+  try {
+    const response = await apiRequest(`/v1/content/${contentId}`, auth, {
+      headers: { "x-workspace-id": workspaceId },
+    });
+    return contentReviewSchema.parse(await response.json());
+  } catch (error) {
+    if (error instanceof ProfitPilotApiError && error.status === 404) return undefined;
+    throw error;
+  }
+}
+
+async function mutateContentReview(
+  auth: WebAuth,
+  workspaceId: string,
+  contentId: string,
+  action: "request-changes" | "approve",
+  input: RequestContentChanges | ApproveContentRevision,
+  idempotencyKey: string,
+): Promise<ContentReviewActionResponse> {
+  if (getWebAuthMode() === "development") {
+    return contentReviewActionResponseSchema.parse({
+      contentId,
+      revisionId: input.revisionId,
+      actionId: crypto.randomUUID(),
+      action: action === "approve" ? "approved" : "changes_requested",
+      status: action === "approve" ? "approved" : "changes_requested",
+      actedAt: new Date().toISOString(),
+      replayed: false,
+    });
+  }
+  const response = await apiRequest(
+    `/v1/workspaces/${workspaceId}/content/${contentId}/review/${action}`,
+    auth,
+    {
+      method: "POST",
+      headers: { "idempotency-key": idempotencyKey },
+      body: JSON.stringify(input),
+    },
+  );
+  return contentReviewActionResponseSchema.parse(await response.json());
+}
+
+export function requestContentChanges(
+  auth: WebAuth,
+  workspaceId: string,
+  contentId: string,
+  input: RequestContentChanges,
+  idempotencyKey: string,
+): Promise<ContentReviewActionResponse> {
+  return mutateContentReview(
+    auth,
+    workspaceId,
+    contentId,
+    "request-changes",
+    input,
+    idempotencyKey,
+  );
+}
+
+export function approveContentRevision(
+  auth: WebAuth,
+  workspaceId: string,
+  contentId: string,
+  input: ApproveContentRevision,
+  idempotencyKey: string,
+): Promise<ContentReviewActionResponse> {
+  return mutateContentReview(auth, workspaceId, contentId, "approve", input, idempotencyKey);
 }

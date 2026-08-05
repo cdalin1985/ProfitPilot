@@ -16,26 +16,37 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 interface RequestChangesDialogProps {
-  onSubmit: () => void;
+  disabled?: boolean;
+  onSubmit: (reason: string) => Promise<boolean>;
 }
 
-export function RequestChangesDialog({ onSubmit }: RequestChangesDialogProps): React.ReactNode {
+export function RequestChangesDialog({
+  disabled,
+  onSubmit,
+}: RequestChangesDialogProps): React.ReactNode {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
 
-  function submit(): void {
+  async function submit(): Promise<void> {
     if (reason.trim().length < 10) {
       return;
     }
-    onSubmit();
-    setOpen(false);
-    setReason("");
+    setPending(true);
+    const completed = await onSubmit(reason.trim());
+    setPending(false);
+    if (completed) {
+      setOpen(false);
+      setReason("");
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Request changes</Button>
+        <Button disabled={disabled} variant="outline">
+          Request changes
+        </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -56,11 +67,11 @@ export function RequestChangesDialog({ onSubmit }: RequestChangesDialogProps): R
           <p className="text-xs text-muted-foreground">Enter at least 10 characters.</p>
         </div>
         <DialogFooter>
-          <Button onClick={() => setOpen(false)} variant="outline">
+          <Button disabled={pending} onClick={() => setOpen(false)} variant="outline">
             Cancel
           </Button>
-          <Button disabled={reason.trim().length < 10} onClick={submit}>
-            Send request
+          <Button disabled={pending || reason.trim().length < 10} onClick={submit}>
+            {pending ? "Sending…" : "Send request"}
           </Button>
         </DialogFooter>
       </DialogContent>

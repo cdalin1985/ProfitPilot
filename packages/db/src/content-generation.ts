@@ -11,6 +11,7 @@ import {
 
 import { withTenant } from "./database.js";
 import {
+  affiliateConnections,
   auditEvents,
   contentGenerationRequests,
   contentItems,
@@ -161,6 +162,7 @@ function buildGroundingFacts(product: {
   available: boolean;
   observedAt: Date;
   sourcePayload: unknown;
+  provider: string | null;
 }): GroundingFact[] {
   const raw = sourceFields(product.sourcePayload);
   const candidates = [
@@ -205,6 +207,13 @@ function buildGroundingFacts(product: {
       "product.category",
       "Product category",
       raw.google_product_category ?? raw.product_type,
+      product.sourceProductId,
+      product.observedAt,
+    ),
+    fact(
+      "affiliate.network",
+      "Affiliate network",
+      product.provider,
       product.sourceProductId,
       product.observedAt,
     ),
@@ -266,9 +275,11 @@ export async function reserveContentGeneration(
         observedAt: products.observedAt,
         expiresAt: products.expiresAt,
         sourcePayload: products.sourcePayload,
+        provider: affiliateConnections.provider,
       })
       .from(opportunities)
       .innerJoin(products, eq(opportunities.productId, products.id))
+      .leftJoin(affiliateConnections, eq(products.connectionId, affiliateConnections.id))
       .where(
         and(
           eq(opportunities.id, input.opportunityId),

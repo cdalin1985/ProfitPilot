@@ -19,6 +19,7 @@ describe("authorization policy", () => {
       workspaceRole: "client_approver",
     } as const;
     expect(can(context, "content:approve")).toBe(true);
+    expect(can(context, "content:read")).toBe(true);
     expect(can(context, "content:edit")).toBe(false);
   });
 

@@ -129,6 +129,11 @@ export const contentGenerationStatus = pgEnum("content_generation_status", [
   "failed",
 ]);
 
+export const contentReviewAction = pgEnum("content_review_action", [
+  "changes_requested",
+  "approved",
+]);
+
 export const evidenceSourceType = pgEnum("evidence_source_type", [
   "network_feed",
   "merchant_page",
@@ -593,6 +598,46 @@ export const contentGenerationRequests = pgTable(
       table.organizationId,
       table.workspaceId,
       table.status,
+    ),
+  ],
+);
+
+export const contentReviewActions = pgTable(
+  "content_review_actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    contentItemId: uuid("content_item_id")
+      .notNull()
+      .references(() => contentItems.id, { onDelete: "cascade" }),
+    contentRevisionId: uuid("content_revision_id")
+      .notNull()
+      .references(() => contentRevisions.id, { onDelete: "restrict" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: contentReviewAction("action").notNull(),
+    comment: text("comment"),
+    requiredChanges: jsonb("required_changes").notNull().default([]),
+    validatorSnapshot: jsonb("validator_snapshot").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("content_review_actions_idempotency_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
+    index("content_review_actions_tenant_content_time_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.contentItemId,
+      table.createdAt,
     ),
   ],
 );

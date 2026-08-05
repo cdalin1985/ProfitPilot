@@ -9,11 +9,15 @@ import { assertCan, AuthorizationError } from "@profit-pilot/authz";
 import {
   awinConnectionTestResponseSchema,
   awinFeedImportResponseSchema,
+  approveContentRevisionSchema,
+  contentReviewActionResponseSchema,
+  contentReviewSchema,
   contentDraftResponseSchema,
   createContentDraftSchema,
   createOrganizationWorkspaceSchema,
   identifierSchema,
   importAwinFeedSchema,
+  requestContentChangesSchema,
   testAwinConnectionSchema,
 } from "@profit-pilot/contracts";
 import {
@@ -26,8 +30,13 @@ import {
   ContentGenerationIdempotencyConflictError,
   ContentGenerationInProgressError,
   OpportunityUnavailableError,
+  ContentApprovalBlockedError,
+  ContentReviewIdempotencyConflictError,
+  ContentReviewNotFoundError,
+  ContentReviewStateError,
+  StaleContentRevisionError,
 } from "@profit-pilot/db";
-import { developmentContentReview, developmentOverview } from "@profit-pilot/fixtures";
+import { developmentOverview } from "@profit-pilot/fixtures";
 
 import {
   ApplicationDependencyError,
@@ -44,6 +53,7 @@ import {
   createConfiguredContentGenerationService,
   type ContentGenerationService,
 } from "./content-generation.js";
+import { createContentReviewService, type ContentReviewService } from "./content-review.js";
 import {
   AwinAuthenticationError,
   AwinFeedNotFoundError,
@@ -72,6 +82,7 @@ export interface ServerDependencies {
   awinClient?: AwinClient;
   productIngestionService?: ProductIngestionService;
   contentGenerationService?: ContentGenerationService;
+  contentReviewService?: ContentReviewService;
 }
 
 export async function buildServer({
@@ -88,6 +99,7 @@ export async function buildServer({
     config,
     createOpenAICredentialResolver(config),
   ),
+  contentReviewService = createContentReviewService(config),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -249,6 +261,40 @@ export async function buildServer({
         type: "https://profitpilot.app/problems/content-idempotency-conflict",
         title: "Content generation idempotency conflict",
         status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof ContentReviewNotFoundError) {
+      return reply.status(404).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/content-review-not-found",
+        title: "Content review not found",
+        status: 404,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (
+      error instanceof ContentReviewIdempotencyConflictError ||
+      error instanceof StaleContentRevisionError ||
+      error instanceof ContentReviewStateError
+    ) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/content-review-conflict",
+        title: "Content review conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof ContentApprovalBlockedError) {
+      return reply.status(422).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/content-approval-blocked",
+        title: "Content approval blocked",
+        status: 422,
         detail: error.message,
         requestId: request.id,
       });
@@ -547,18 +593,56 @@ export async function buildServer({
         typeof workspaceHeader === "string" ? workspaceHeader : undefined,
       );
       const context = await services.resolveTenant(actor, workspaceId);
-      assertCan(context, "content:edit");
+      assertCan(context, "content:read");
+      const content = await contentReviewService.get(context, request.params.contentId);
+      return content
+        ? contentReviewSchema.parse(content)
+        : reply.status(404).type("application/problem+json").send({
+            type: "https://profitpilot.app/problems/content-review-not-found",
+            title: "Content review not found",
+            status: 404,
+            requestId: request.id,
+          });
+    },
+  );
 
-      if (config.NODE_ENV === "production") {
-        return reply.status(501).type("application/problem+json").send({
-          type: "https://profitpilot.app/problems/repository-unavailable",
-          title: "Content repository is not configured",
-          status: 501,
-          requestId: request.id,
-        });
-      }
+  server.post<{ Params: { workspaceId: string; contentId: string } }>(
+    "/v1/workspaces/:workspaceId/content/:contentId/review/request-changes",
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const contentId = identifierSchema.parse(request.params.contentId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:approve");
+      const idempotencyHeader = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
+      );
+      const input = requestContentChangesSchema.parse(request.body);
+      const result = contentReviewActionResponseSchema.parse(
+        await contentReviewService.requestChanges(context, contentId, input, idempotencyKey),
+      );
+      return reply.status(result.replayed ? 200 : 201).send(result);
+    },
+  );
 
-      return developmentContentReview;
+  server.post<{ Params: { workspaceId: string; contentId: string } }>(
+    "/v1/workspaces/:workspaceId/content/:contentId/review/approve",
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const contentId = identifierSchema.parse(request.params.contentId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:approve");
+      const idempotencyHeader = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
+      );
+      const input = approveContentRevisionSchema.parse(request.body);
+      const result = contentReviewActionResponseSchema.parse(
+        await contentReviewService.approve(context, contentId, input, idempotencyKey),
+      );
+      return reply.status(result.replayed ? 200 : 201).send(result);
     },
   );
 

@@ -24,6 +24,12 @@ const connectionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c111";
 const connectionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c112";
 const generationRequestA = "018f6d4d-74d4-7c18-a1d4-bb620a63c121";
 const generationRequestB = "018f6d4d-74d4-7c18-a1d4-bb620a63c122";
+const contentItemA = "018f6d4d-74d4-7c18-a1d4-bb620a63c131";
+const contentItemB = "018f6d4d-74d4-7c18-a1d4-bb620a63c132";
+const contentRevisionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c141";
+const contentRevisionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c142";
+const reviewActionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c151";
+const reviewActionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c152";
 const userA = "018f6d4d-74d4-7c18-a1d4-bb620a63c301";
 const userB = "018f6d4d-74d4-7c18-a1d4-bb620a63c302";
 const actorA = "user_integration_a";
@@ -232,6 +238,36 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
         (${generationRequestB}, ${organizationB}, ${workspaceB}, ${userB}, 'tenant-b-generation', 'fingerprint-b', 'pending')
       on conflict (id) do nothing
     `;
+
+    await admin`
+      insert into content_items (id, organization_id, workspace_id, title, content_type, status)
+      values
+        (${contentItemA}, ${organizationA}, ${workspaceA}, 'Tenant A Review', 'article', 'in_review'),
+        (${contentItemB}, ${organizationB}, ${workspaceB}, 'Tenant B Review', 'article', 'in_review')
+      on conflict (id) do nothing
+    `;
+    await admin`
+      insert into content_revisions (
+        id, organization_id, workspace_id, content_item_id, revision_number, body,
+        disclosure_version, source_snapshot, validator_results, checksum
+      )
+      values
+        (${contentRevisionA}, ${organizationA}, ${workspaceA}, ${contentItemA}, 1, '{}'::jsonb, 'v1', '{}'::jsonb, '{"checks":[]}'::jsonb, 'a'),
+        (${contentRevisionB}, ${organizationB}, ${workspaceB}, ${contentItemB}, 1, '{}'::jsonb, 'v1', '{}'::jsonb, '{"checks":[]}'::jsonb, 'b')
+      on conflict (id) do nothing
+    `;
+    await admin`update content_items set current_revision_id = ${contentRevisionA} where id = ${contentItemA}`;
+    await admin`update content_items set current_revision_id = ${contentRevisionB} where id = ${contentItemB}`;
+    await admin`
+      insert into content_review_actions (
+        id, organization_id, workspace_id, content_item_id, content_revision_id,
+        actor_user_id, action, validator_snapshot, request_fingerprint, idempotency_key
+      )
+      values
+        (${reviewActionA}, ${organizationA}, ${workspaceA}, ${contentItemA}, ${contentRevisionA}, ${userA}, 'approved', '{}'::jsonb, 'review-a', 'review-a'),
+        (${reviewActionB}, ${organizationB}, ${workspaceB}, ${contentItemB}, ${contentRevisionB}, ${userB}, 'approved', '{}'::jsonb, 'review-b', 'review-b')
+      on conflict (id) do nothing
+    `;
   });
 
   afterAll(async () => {
@@ -324,6 +360,25 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
     });
 
     expect(rows).toEqual([{ id: generationRequestA, idempotency_key: "tenant-a-generation" }]);
+  });
+
+  it("isolates review history and keeps it append-only for the application role", async () => {
+    if (!application || !admin) return;
+
+    const rows = await application.begin(async (transaction) => {
+      await transaction`select set_config('app.current_organization_id', ${organizationA}, true)`;
+      await transaction`select set_config('app.current_workspace_id', ${workspaceA}, true)`;
+      await transaction`update content_review_actions set comment = 'tampered' where id = ${reviewActionA}`;
+      return transaction<
+        { id: string; idempotency_key: string; comment: string | null }[]
+      >`select id, idempotency_key, comment from content_review_actions`;
+    });
+
+    expect(rows).toEqual([{ id: reviewActionA, idempotency_key: "review-a", comment: null }]);
+    const [stored] = await admin<
+      { comment: string | null }[]
+    >`select comment from content_review_actions where id = ${reviewActionA}`;
+    expect(stored?.comment).toBeNull();
   });
 
   it("resolves tenant roles only for the authenticated actor and IdP organization", async () => {
