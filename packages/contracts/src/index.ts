@@ -320,5 +320,35 @@ export const awinConnectionTestResponseSchema = z.object({
   verifiedAt: z.string().datetime(),
 });
 
+export const importAwinFeedSchema = z.object({
+  connectionId: identifierSchema,
+  publisherId: z.number().int().positive(),
+  advertiserId: z.number().int().positive(),
+  locale: z
+    .string()
+    .trim()
+    .regex(/^[a-z]{2}_[A-Z]{2}$/, "Use an Awin feed locale such as en_US"),
+  commissionRate: z.number().min(0).max(100).optional(),
+});
+
+export const awinFeedImportResponseSchema = z.object({
+  provider: z.literal("awin"),
+  status: z.enum(["ingested", "not_modified"]),
+  feed: z.object({
+    publisherId: z.number().int().positive(),
+    advertiserId: z.number().int().positive(),
+    locale: z.string(),
+  }),
+  products: z.object({
+    received: z.number().int().nonnegative(),
+    accepted: z.number().int().nonnegative(),
+    rejected: z.number().int().nonnegative(),
+  }),
+  nextEligibleAt: z.string().datetime(),
+  completedAt: z.string().datetime(),
+});
+
 export type TestAwinConnection = z.infer<typeof testAwinConnectionSchema>;
 export type AwinConnectionTestResponse = z.infer<typeof awinConnectionTestResponseSchema>;
+export type ImportAwinFeed = z.infer<typeof importAwinFeedSchema>;
+export type AwinFeedImportResponse = z.infer<typeof awinFeedImportResponseSchema>;

@@ -20,6 +20,8 @@ const organizationA = "018f6d4d-74d4-7c18-a1d4-bb620a63c001";
 const organizationB = "018f6d4d-74d4-7c18-a1d4-bb620a63c002";
 const workspaceA = "018f6d4d-74d4-7c18-a1d4-bb620a63c101";
 const workspaceB = "018f6d4d-74d4-7c18-a1d4-bb620a63c102";
+const connectionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c111";
+const connectionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c112";
 const userA = "018f6d4d-74d4-7c18-a1d4-bb620a63c301";
 const userB = "018f6d4d-74d4-7c18-a1d4-bb620a63c302";
 const actorA = "user_integration_a";
@@ -180,6 +182,38 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
         )
       on conflict (id) do nothing
     `;
+
+    await admin`
+      insert into affiliate_connections (
+        id,
+        organization_id,
+        workspace_id,
+        provider,
+        secret_reference,
+        status,
+        policy_version
+      )
+      values
+        (${connectionA}, ${organizationA}, ${workspaceA}, 'awin', 'test/tenant-a', 'active', 'v1'),
+        (${connectionB}, ${organizationB}, ${workspaceB}, 'awin', 'test/tenant-b', 'active', 'v1')
+      on conflict (id) do nothing
+    `;
+
+    await admin`
+      insert into feed_sync_states (
+        organization_id,
+        workspace_id,
+        connection_id,
+        publisher_id,
+        advertiser_id,
+        locale,
+        status
+      )
+      values
+        (${organizationA}, ${workspaceA}, ${connectionA}, 1001, 2001, 'en_US', 'succeeded'),
+        (${organizationB}, ${workspaceB}, ${connectionB}, 1002, 2002, 'en_US', 'succeeded')
+      on conflict (workspace_id, connection_id, publisher_id, advertiser_id, locale) do nothing
+    `;
   });
 
   afterAll(async () => {
@@ -244,6 +278,20 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
         `;
       }),
     ).rejects.toThrow(/row-level security policy/i);
+  });
+
+  it("isolates persisted feed freshness and lease state", async () => {
+    if (!application) return;
+
+    const rows = await application.begin(async (transaction) => {
+      await transaction`select set_config('app.current_organization_id', ${organizationA}, true)`;
+      await transaction`select set_config('app.current_workspace_id', ${workspaceA}, true)`;
+      return transaction<
+        { connection_id: string; advertiser_id: number }[]
+      >`select connection_id, advertiser_id from feed_sync_states`;
+    });
+
+    expect(rows).toEqual([{ connection_id: connectionA, advertiser_id: 2001 }]);
   });
 
   it("resolves tenant roles only for the authenticated actor and IdP organization", async () => {

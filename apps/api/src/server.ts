@@ -8,11 +8,20 @@ import { ZodError } from "zod";
 import { assertCan, AuthorizationError } from "@profit-pilot/authz";
 import {
   awinConnectionTestResponseSchema,
+  awinFeedImportResponseSchema,
   createOrganizationWorkspaceSchema,
   identifierSchema,
+  importAwinFeedSchema,
   testAwinConnectionSchema,
 } from "@profit-pilot/contracts";
-import { checkDatabaseReady, closeDatabase } from "@profit-pilot/db";
+import {
+  AffiliateConnectionUnavailableError,
+  checkDatabaseReady,
+  closeDatabase,
+  FeedSyncFreshnessError,
+  FeedSyncInProgressError,
+  FeedSyncQuotaError,
+} from "@profit-pilot/db";
 import { developmentContentReview, developmentOverview } from "@profit-pilot/fixtures";
 
 import {
@@ -26,12 +35,19 @@ import {
 import type { ApiConfig } from "./config.js";
 import {
   AwinAuthenticationError,
+  AwinFeedNotFoundError,
+  AwinFeedValidationError,
   AwinUnavailableError,
   createAwinClient,
   type AwinClient,
 } from "./awin.js";
 import { IdentityProvisioningError } from "./identity-admin.js";
 import { AuthenticationError, createIdentityProvider, type IdentityProvider } from "./identity.js";
+import {
+  createProductIngestionService,
+  type ProductIngestionService,
+} from "./product-ingestion.js";
+import { createAwinCredentialResolver, SecretResolutionError } from "./secrets.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -39,6 +55,7 @@ export interface ServerDependencies {
   services?: ApplicationServices;
   readinessProbe?: () => Promise<void>;
   awinClient?: AwinClient;
+  productIngestionService?: ProductIngestionService;
 }
 
 export async function buildServer({
@@ -47,6 +64,10 @@ export async function buildServer({
   services = createApplicationServices(config),
   readinessProbe = config.DATABASE_URL ? checkDatabaseReady : async () => undefined,
   awinClient = createAwinClient(),
+  productIngestionService = createProductIngestionService({
+    awinClient,
+    credentialResolver: createAwinCredentialResolver(config),
+  }),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -60,6 +81,7 @@ export async function buildServer({
           "*.password",
           "*.secret",
           "*.token",
+          "*.accessToken",
         ],
         censor: "[REDACTED]",
       },
@@ -157,6 +179,67 @@ export async function buildServer({
         detail: error.message,
         requestId: request.id,
       });
+    }
+
+    if (error instanceof AwinFeedNotFoundError) {
+      return reply.status(422).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/awin-feed-not-found",
+        title: "Awin feed could not be found",
+        status: 422,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof AwinFeedValidationError) {
+      request.log.warn({ err: error }, "Awin feed validation failed");
+      return reply.status(502).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/awin-feed-invalid",
+        title: "Awin returned an invalid product feed",
+        status: 502,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof AffiliateConnectionUnavailableError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/affiliate-connection-unavailable",
+        title: "Awin connection is unavailable",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof SecretResolutionError) {
+      request.log.error({ err: error }, "Awin credential resolution failed");
+      return reply.status(503).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/secret-resolution-failed",
+        title: "Awin credential is unavailable",
+        status: 503,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (
+      error instanceof FeedSyncFreshnessError ||
+      error instanceof FeedSyncInProgressError ||
+      error instanceof FeedSyncQuotaError
+    ) {
+      const retryAfter = Math.max(1, Math.ceil((error.retryAt.getTime() - Date.now()) / 1_000));
+      return reply
+        .header("retry-after", String(retryAfter))
+        .status(429)
+        .type("application/problem+json")
+        .send({
+          type: "https://profitpilot.app/problems/awin-feed-rate-limited",
+          title: "Awin feed import is not eligible yet",
+          status: 429,
+          detail: error.message,
+          requestId: request.id,
+        });
     }
 
     if (error instanceof AwinUnavailableError) {
@@ -329,6 +412,28 @@ export async function buildServer({
         publishers,
         verifiedAt: new Date().toISOString(),
       });
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/connections/awin/imports",
+    {
+      config: {
+        rateLimit: {
+          max: 4,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "connections:manage");
+      const input = importAwinFeedSchema.parse(request.body);
+      return awinFeedImportResponseSchema.parse(
+        await productIngestionService.importAwinFeed(context, input),
+      );
     },
   );
 

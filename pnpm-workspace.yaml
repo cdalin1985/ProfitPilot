@@ -14,8 +14,10 @@ overrides:
   "@hono/node-server@<2.0.10": 2.0.10
   "brace-expansion@<=5.0.7": 5.0.8
   "esbuild@<=0.24.2": 0.25.12
+  "fast-uri@>=3.0.0 <3.1.5": 3.1.5
+  "fast-uri@>=4.0.0 <4.1.2": 4.1.2
   "find-my-way@<=9.6.0": 9.7.0
-  postcss: 8.5.20
+  postcss: 8.5.23
   sharp: 0.35.0
 
 catalog:
@@ -35,6 +37,7 @@ minimumReleaseAgeExclude:
   - brace-expansion@5.0.8
   - eslint-config-next@16.2.12
   - find-my-way@9.7.0
+  - "fast-uri@3.1.5||4.1.2"
   - next@16.2.12
 
 trustPolicy: no-downgrade

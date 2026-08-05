@@ -7,6 +7,7 @@ import {
   contentItems,
   contentRevisions,
   evidenceRecords,
+  feedSyncStates,
   onboardingRequests,
   opportunities,
   products,
@@ -18,6 +19,7 @@ import {
 describe("tenant-owned database tables", () => {
   it.each([
     ["affiliateConnections", affiliateConnections],
+    ["feedSyncStates", feedSyncStates],
     ["products", products],
     ["opportunities", opportunities],
     ["contentItems", contentItems],

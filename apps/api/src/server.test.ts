@@ -8,6 +8,7 @@ import { loadConfig } from "./config.js";
 import type { IdentityProvider } from "./identity.js";
 import { buildServer } from "./server.js";
 import type { AwinClient } from "./awin.js";
+import type { ProductIngestionService } from "./product-ingestion.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -178,7 +179,12 @@ describe("API server", () => {
 
   it("runs a tenant-authorized read-only Awin connection test", async () => {
     const listPublishers = vi.fn(async () => [{ publisherId: 1234, name: "Northstar Media" }]);
-    const awinClient: AwinClient = { listPublishers };
+    const awinClient: AwinClient = {
+      listPublishers,
+      async downloadEnhancedFeed() {
+        return { status: "not_modified" };
+      },
+    };
     const server = await buildServer({
       config: testConfig(),
       identityProvider: testIdentityProvider,
@@ -200,5 +206,42 @@ describe("API server", () => {
       publishers: [{ publisherId: 1234, name: "Northstar Media" }],
     });
     expect(listPublishers).toHaveBeenCalledWith("a-secure-connection-token");
+  });
+
+  it("runs a tenant-authorized Awin product import", async () => {
+    const importAwinFeed = vi.fn(async () => ({
+      provider: "awin" as const,
+      status: "ingested" as const,
+      feed: { publisherId: 1234, advertiserId: 5678, locale: "en_US" },
+      products: { received: 2, accepted: 2, rejected: 0 },
+      nextEligibleAt: "2026-08-05T12:15:00.000Z",
+      completedAt: "2026-08-05T12:00:00.000Z",
+    }));
+    const productIngestionService: ProductIngestionService = { importAwinFeed };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      productIngestionService,
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/connections/awin/imports`,
+      payload: {
+        connectionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        publisherId: 1234,
+        advertiserId: 5678,
+        locale: "en_US",
+      },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().products).toEqual({ received: 2, accepted: 2, rejected: 0 });
+    expect(importAwinFeed).toHaveBeenCalledWith(
+      developmentSession.tenant,
+      expect.objectContaining({ connectionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101" }),
+    );
   });
 });

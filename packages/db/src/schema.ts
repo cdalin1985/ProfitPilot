@@ -100,6 +100,14 @@ export const affiliateProvider = pgEnum("affiliate_provider", [
   "manual_feed",
 ]);
 
+export const feedSyncStatus = pgEnum("feed_sync_status", [
+  "idle",
+  "running",
+  "succeeded",
+  "not_modified",
+  "failed",
+]);
+
 export const contentType = pgEnum("content_type", ["article", "comparison", "roundup", "social"]);
 
 export const contentStatus = pgEnum("content_status", [
@@ -325,6 +333,57 @@ export const affiliateConnections = pgTable(
   ],
 );
 
+export const feedSyncStates = pgTable(
+  "feed_sync_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => affiliateConnections.id, { onDelete: "cascade" }),
+    publisherId: integer("publisher_id").notNull(),
+    advertiserId: integer("advertiser_id").notNull(),
+    locale: text("locale").notNull(),
+    status: feedSyncStatus("status").notNull().default("idle"),
+    sourceEtag: text("source_etag"),
+    sourceLastModifiedAt: timestamp("source_last_modified_at", { withTimezone: true }),
+    lastStartedAt: timestamp("last_started_at", { withTimezone: true }),
+    lastCompletedAt: timestamp("last_completed_at", { withTimezone: true }),
+    nextEligibleAt: timestamp("next_eligible_at", { withTimezone: true }),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastProductCount: integer("last_product_count").notNull().default(0),
+    lastRejectedCount: integer("last_rejected_count").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("feed_sync_states_source_unique").on(
+      table.workspaceId,
+      table.connectionId,
+      table.publisherId,
+      table.advertiserId,
+      table.locale,
+    ),
+    index("feed_sync_states_tenant_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.status,
+    ),
+    check("feed_sync_states_publisher_positive", sql`${table.publisherId} > 0`),
+    check("feed_sync_states_advertiser_positive", sql`${table.advertiserId} > 0`),
+    check("feed_sync_states_locale_check", sql`${table.locale} ~ '^[a-z]{2}_[A-Z]{2}$'`),
+    check(
+      "feed_sync_states_counts_nonnegative",
+      sql`${table.lastProductCount} >= 0 and ${table.lastRejectedCount} >= 0`,
+    ),
+  ],
+);
+
 export const products = pgTable(
   "products",
   {
@@ -396,6 +455,11 @@ export const opportunities = pgTable(
       table.organizationId,
       table.workspaceId,
       table.score,
+    ),
+    uniqueIndex("opportunities_product_version_time_unique").on(
+      table.productId,
+      table.scoreVersion,
+      table.scoredAt,
     ),
     check("opportunities_score_check", sql`${table.score} between 0 and 100`),
   ],

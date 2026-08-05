@@ -20,6 +20,10 @@ const configSchema = z
     AUDIT_IP_HASH_KEY: z.string().min(32).optional(),
     ALLOWED_ORIGINS: z.string().default("http://localhost:3000"),
     DATABASE_URL: z.string().url().optional(),
+    AWS_REGION: z
+      .string()
+      .regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/)
+      .default("us-east-1"),
   })
   .superRefine((value, context) => {
     if (value.NODE_ENV === "production" && value.AUTH_MODE !== "oidc") {
