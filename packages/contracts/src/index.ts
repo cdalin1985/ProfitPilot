@@ -303,3 +303,22 @@ export const problemDetailsSchema = z.object({
 });
 
 export type ProblemDetails = z.infer<typeof problemDetailsSchema>;
+
+export const testAwinConnectionSchema = z.object({
+  accessToken: z.string().trim().min(20).max(4096),
+});
+
+export const awinConnectionTestResponseSchema = z.object({
+  provider: z.literal("awin"),
+  status: z.literal("verified"),
+  publishers: z.array(
+    z.object({
+      publisherId: z.number().int().positive(),
+      name: z.string().min(1),
+    }),
+  ),
+  verifiedAt: z.string().datetime(),
+});
+
+export type TestAwinConnection = z.infer<typeof testAwinConnectionSchema>;
+export type AwinConnectionTestResponse = z.infer<typeof awinConnectionTestResponseSchema>;
