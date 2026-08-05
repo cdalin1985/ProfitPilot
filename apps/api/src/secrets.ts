@@ -9,9 +9,15 @@ import type { ApiConfig } from "./config.js";
 
 const accessTokenSchema = z.string().trim().min(20).max(4096);
 const structuredSecretSchema = z.object({ accessToken: accessTokenSchema });
+const apiKeySchema = z.string().trim().min(20).max(4096);
+const structuredApiKeySchema = z.object({ apiKey: apiKeySchema });
 
 export interface AwinCredentialResolver {
   resolveAccessToken(secretReference: string): Promise<string>;
+}
+
+export interface OpenAICredentialResolver {
+  resolveApiKey(secretReference: string): Promise<string>;
 }
 
 export class SecretResolutionError extends Error {
@@ -41,29 +47,62 @@ function parseSecret(value: string): string {
   }
 }
 
-export function createAwinCredentialResolver(
+function parseApiKey(value: string): string {
+  const direct = apiKeySchema.safeParse(value);
+  if (direct.success && !value.trim().startsWith("{")) return direct.data;
+
+  try {
+    return structuredApiKeySchema.parse(JSON.parse(value)).apiKey;
+  } catch {
+    throw new SecretResolutionError();
+  }
+}
+
+function createSecretReader(
   config: Pick<ApiConfig, "AWS_REGION">,
   client: SecretsManagerReader = new SecretsManagerClient({
     region: config.AWS_REGION,
   } satisfies SecretsManagerClientConfig),
+): (secretReference: string) => Promise<string> {
+  return async (secretReference) => {
+    if (!secretReference || secretReference.length > 2048 || /[\r\n\0]/.test(secretReference)) {
+      throw new SecretResolutionError();
+    }
+
+    try {
+      const result = await client.send(new GetSecretValueCommand({ SecretId: secretReference }));
+      const secret =
+        result.SecretString ??
+        (result.SecretBinary ? Buffer.from(result.SecretBinary).toString("utf8") : undefined);
+      if (!secret) throw new SecretResolutionError();
+      return secret;
+    } catch (error) {
+      if (error instanceof SecretResolutionError) throw error;
+      throw new SecretResolutionError();
+    }
+  };
+}
+
+export function createAwinCredentialResolver(
+  config: Pick<ApiConfig, "AWS_REGION">,
+  client?: SecretsManagerReader,
 ): AwinCredentialResolver {
+  const readSecret = createSecretReader(config, client);
   return {
     async resolveAccessToken(secretReference) {
-      if (!secretReference || secretReference.length > 2048 || /[\r\n\0]/.test(secretReference)) {
-        throw new SecretResolutionError();
-      }
+      return parseSecret(await readSecret(secretReference));
+    },
+  };
+}
 
-      try {
-        const result = await client.send(new GetSecretValueCommand({ SecretId: secretReference }));
-        const secret =
-          result.SecretString ??
-          (result.SecretBinary ? Buffer.from(result.SecretBinary).toString("utf8") : undefined);
-        if (!secret) throw new SecretResolutionError();
-        return parseSecret(secret);
-      } catch (error) {
-        if (error instanceof SecretResolutionError) throw error;
-        throw new SecretResolutionError();
-      }
+export function createOpenAICredentialResolver(
+  config: Pick<ApiConfig, "AWS_REGION">,
+  client?: SecretsManagerReader,
+): OpenAICredentialResolver {
+  const readSecret = createSecretReader(config, client);
+  return {
+    async resolveApiKey(secretReference) {
+      return parseApiKey(await readSecret(secretReference));
     },
   };
 }

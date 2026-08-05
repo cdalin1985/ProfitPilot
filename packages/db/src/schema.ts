@@ -123,6 +123,12 @@ export const contentStatus = pgEnum("content_status", [
   "archived",
 ]);
 
+export const contentGenerationStatus = pgEnum("content_generation_status", [
+  "pending",
+  "completed",
+  "failed",
+]);
+
 export const evidenceSourceType = pgEnum("evidence_source_type", [
   "network_feed",
   "merchant_page",
@@ -549,6 +555,45 @@ export const evidenceRecords = pgTable(
   (table) => [
     index("evidence_records_revision_claim_idx").on(table.contentRevisionId, table.claimKey),
     index("evidence_records_tenant_idx").on(table.organizationId, table.workspaceId),
+  ],
+);
+
+export const contentGenerationRequests = pgTable(
+  "content_generation_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    status: contentGenerationStatus("status").notNull().default("pending"),
+    contentItemId: uuid("content_item_id").references(() => contentItems.id, {
+      onDelete: "set null",
+    }),
+    result: jsonb("result"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("content_generation_requests_idempotency_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
+    index("content_generation_requests_tenant_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.status,
+    ),
   ],
 );
 

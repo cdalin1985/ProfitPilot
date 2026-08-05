@@ -22,6 +22,8 @@ const workspaceA = "018f6d4d-74d4-7c18-a1d4-bb620a63c101";
 const workspaceB = "018f6d4d-74d4-7c18-a1d4-bb620a63c102";
 const connectionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c111";
 const connectionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c112";
+const generationRequestA = "018f6d4d-74d4-7c18-a1d4-bb620a63c121";
+const generationRequestB = "018f6d4d-74d4-7c18-a1d4-bb620a63c122";
 const userA = "018f6d4d-74d4-7c18-a1d4-bb620a63c301";
 const userB = "018f6d4d-74d4-7c18-a1d4-bb620a63c302";
 const actorA = "user_integration_a";
@@ -214,6 +216,22 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
         (${organizationB}, ${workspaceB}, ${connectionB}, 1002, 2002, 'en_US', 'succeeded')
       on conflict (workspace_id, connection_id, publisher_id, advertiser_id, locale) do nothing
     `;
+
+    await admin`
+      insert into content_generation_requests (
+        id,
+        organization_id,
+        workspace_id,
+        requested_by_user_id,
+        idempotency_key,
+        request_fingerprint,
+        status
+      )
+      values
+        (${generationRequestA}, ${organizationA}, ${workspaceA}, ${userA}, 'tenant-a-generation', 'fingerprint-a', 'pending'),
+        (${generationRequestB}, ${organizationB}, ${workspaceB}, ${userB}, 'tenant-b-generation', 'fingerprint-b', 'pending')
+      on conflict (id) do nothing
+    `;
   });
 
   afterAll(async () => {
@@ -292,6 +310,20 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
     });
 
     expect(rows).toEqual([{ connection_id: connectionA, advertiser_id: 2001 }]);
+  });
+
+  it("isolates content generation idempotency and lease state", async () => {
+    if (!application) return;
+
+    const rows = await application.begin(async (transaction) => {
+      await transaction`select set_config('app.current_organization_id', ${organizationA}, true)`;
+      await transaction`select set_config('app.current_workspace_id', ${workspaceA}, true)`;
+      return transaction<
+        { id: string; idempotency_key: string }[]
+      >`select id, idempotency_key from content_generation_requests`;
+    });
+
+    expect(rows).toEqual([{ id: generationRequestA, idempotency_key: "tenant-a-generation" }]);
   });
 
   it("resolves tenant roles only for the authenticated actor and IdP organization", async () => {

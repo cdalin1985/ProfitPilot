@@ -4,6 +4,7 @@ import type { AuthenticatedActor } from "@profit-pilot/contracts";
 import { developmentSession } from "@profit-pilot/fixtures";
 
 import type { ApplicationServices } from "./application-services.js";
+import type { ContentGenerationService } from "./content-generation.js";
 import { loadConfig } from "./config.js";
 import type { IdentityProvider } from "./identity.js";
 import { buildServer } from "./server.js";
@@ -242,6 +243,85 @@ describe("API server", () => {
     expect(importAwinFeed).toHaveBeenCalledWith(
       developmentSession.tenant,
       expect.objectContaining({ connectionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101" }),
+    );
+  });
+
+  it("creates an idempotent tenant-authorized grounded content draft", async () => {
+    const createDraft = vi.fn(async () => ({
+      contentId: "018f6d4d-74d4-7c18-a1d4-bb620a63b201",
+      revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b202",
+      status: "in_review" as const,
+      revision: 1,
+      validationChecks: [
+        {
+          key: "factual_grounding" as const,
+          label: "Factual grounding",
+          result: "Pass",
+          status: "pass" as const,
+        },
+        {
+          key: "disclosure" as const,
+          label: "Disclosure",
+          result: "Present",
+          status: "pass" as const,
+        },
+        {
+          key: "prohibited_claims" as const,
+          label: "Prohibited claims",
+          result: "None",
+          status: "pass" as const,
+        },
+        {
+          key: "near_duplicate" as const,
+          label: "Near-duplicate risk",
+          result: "Low",
+          status: "pass" as const,
+        },
+        {
+          key: "link_policy" as const,
+          label: "Link policy",
+          result: "Pass",
+          status: "pass" as const,
+        },
+      ],
+      evidenceCount: 3,
+      promptVersion: "openai-grounded-v1.0.0",
+      generatedAt: "2026-08-05T12:00:00.000Z",
+      replayed: false,
+    }));
+    const contentGenerationService: ContentGenerationService = { createDraft };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      contentGenerationService,
+    });
+    const idempotencyKey = "018f6d4d-74d4-7c18-a1d4-bb620a63f201";
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/content/drafts`,
+      headers: { "idempotency-key": idempotencyKey },
+      payload: {
+        opportunityId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        title: "Best insulated mugs for commuters",
+        contentType: "article",
+        locale: "en-US",
+        brief: {
+          audience: "Daily rail commuters",
+          angle: "Practical evidence-backed features",
+          tone: "practical",
+        },
+      },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers.location).toBe("/v1/content/018f6d4d-74d4-7c18-a1d4-bb620a63b201");
+    expect(createDraft).toHaveBeenCalledWith(
+      developmentSession.tenant,
+      expect.objectContaining({ contentType: "article", locale: "en-US" }),
+      idempotencyKey,
     );
   });
 });

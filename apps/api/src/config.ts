@@ -24,6 +24,13 @@ const configSchema = z
       .string()
       .regex(/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/)
       .default("us-east-1"),
+    OPENAI_API_KEY_SECRET_REFERENCE: z
+      .string()
+      .min(1)
+      .max(2048)
+      .refine((value) => !/[\r\n\0]/.test(value))
+      .optional(),
+    OPENAI_GENERATION_MODEL: z.string().trim().min(1).max(120).default("gpt-5.6"),
   })
   .superRefine((value, context) => {
     if (value.NODE_ENV === "production" && value.AUTH_MODE !== "oidc") {
