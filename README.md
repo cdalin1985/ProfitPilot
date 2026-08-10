@@ -83,7 +83,7 @@ The inception milestone is implemented: application shell and review workflows, 
 
 PP-101 organization onboarding is implemented with WorkOS AuthKit, verified-user provisioning, resumable idempotency, local organization/workspace roles, actor- and tenant-scoped row-level security, session refresh, and organization/workspace selection. Production activation still requires the human-owned WorkOS environment and staging checks.
 
-The Awin boundary now includes read-only token verification, server-side Secrets Manager credential resolution, enhanced JSONL feed ingestion, durable quota/freshness leases, normalization, and deterministic opportunity scoring. Live staging verification still requires an approved Awin publisher account, an active tenant connection record, and its real secret reference.
+The Awin boundary now includes read-only token verification, server-side Secrets Manager credential resolution, enhanced JSONL feed ingestion, durable quota/freshness leases, normalization, and deterministic opportunity scoring. Live staging verification requires an approved Awin publisher account, an active tenant connection record, and its real secret reference; follow the [Awin staging verification runbook](docs/operations/AWIN_STAGING_VERIFICATION.md).
 
 Production overview/content repositories, grounded generation, WordPress publication, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
