@@ -19,8 +19,8 @@ import { AwinFeedValidationError, type AwinClient, type AwinFeedDownload } from 
 import type { AwinCredentialResolver } from "./secrets.js";
 
 export const OPPORTUNITY_SCORE_VERSION = "awin-v1.0.0";
+export const AWIN_MAX_REJECTION_RATE = 0.05;
 const MAX_SOURCE_PAYLOAD_BYTES = 128 * 1_024;
-const MAX_REJECTION_RATE = 0.05;
 
 const sourceProductSchema = z
   .object({
@@ -287,7 +287,7 @@ function normalizeDownload(
 
   if (
     download.products.length > 0 &&
-    (products.length === 0 || rejected / download.products.length > MAX_REJECTION_RATE)
+    (products.length === 0 || rejected / download.products.length > AWIN_MAX_REJECTION_RATE)
   ) {
     throw new AwinFeedValidationError(
       "Too many Awin products failed normalization; the existing catalog was preserved",
