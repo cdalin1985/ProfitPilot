@@ -13,12 +13,18 @@ import {
   contentReviewActionResponseSchema,
   contentReviewSchema,
   contentDraftResponseSchema,
+  configureWordPressDestinationSchema,
   createContentDraftSchema,
+  createWordPressDraftSchema,
   createOrganizationWorkspaceSchema,
   identifierSchema,
   importAwinFeedSchema,
   requestContentChangesSchema,
   testAwinConnectionSchema,
+  testWordPressConnectionSchema,
+  wordpressConnectionTestResponseSchema,
+  wordpressDestinationSchema,
+  wordpressDraftPublicationSchema,
 } from "@profit-pilot/contracts";
 import {
   AffiliateConnectionUnavailableError,
@@ -35,6 +41,11 @@ import {
   ContentReviewNotFoundError,
   ContentReviewStateError,
   StaleContentRevisionError,
+  PublicationContentStateError,
+  PublicationIdempotencyConflictError,
+  PublicationInProgressError,
+  PublicationLeaseLostError,
+  PublishingDestinationNotFoundError,
 } from "@profit-pilot/db";
 import { developmentOverview } from "@profit-pilot/fixtures";
 
@@ -55,6 +66,11 @@ import {
 } from "./content-generation.js";
 import { createContentReviewService, type ContentReviewService } from "./content-review.js";
 import {
+  createConfiguredPublicationService,
+  type PublicationService,
+  WordPressPublicationConfigurationError,
+} from "./publication.js";
+import {
   AwinAuthenticationError,
   AwinFeedNotFoundError,
   AwinFeedValidationError,
@@ -71,8 +87,16 @@ import {
 import {
   createAwinCredentialResolver,
   createOpenAICredentialResolver,
+  createWordPressCredentialResolver,
   SecretResolutionError,
 } from "./secrets.js";
+import {
+  createWordPressClient,
+  UnsafeWordPressTargetError,
+  WordPressAuthenticationError,
+  WordPressDraftConflictError,
+  WordPressUnavailableError,
+} from "./wordpress.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -83,6 +107,7 @@ export interface ServerDependencies {
   productIngestionService?: ProductIngestionService;
   contentGenerationService?: ContentGenerationService;
   contentReviewService?: ContentReviewService;
+  publicationService?: PublicationService;
 }
 
 export async function buildServer({
@@ -100,6 +125,11 @@ export async function buildServer({
     createOpenAICredentialResolver(config),
   ),
   contentReviewService = createContentReviewService(config),
+  publicationService = createConfiguredPublicationService(
+    config,
+    createWordPressClient(),
+    createWordPressCredentialResolver(config),
+  ),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -111,6 +141,7 @@ export async function buildServer({
           "req.headers.cookie",
           "res.headers.set-cookie",
           "*.password",
+          "*.applicationPassword",
           "*.secret",
           "*.token",
           "*.accessToken",
@@ -246,10 +277,10 @@ export async function buildServer({
     }
 
     if (error instanceof SecretResolutionError) {
-      request.log.error({ err: error }, "Awin credential resolution failed");
+      request.log.error({ err: error }, "credential resolution failed");
       return reply.status(503).type("application/problem+json").send({
         type: "https://profitpilot.app/problems/secret-resolution-failed",
-        title: "Awin credential is unavailable",
+        title: "The stored credential is unavailable",
         status: 503,
         detail: error.message,
         requestId: request.id,
@@ -295,6 +326,80 @@ export async function buildServer({
         type: "https://profitpilot.app/problems/content-approval-blocked",
         title: "Content approval blocked",
         status: 422,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof UnsafeWordPressTargetError) {
+      return reply.status(422).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/unsafe-wordpress-target",
+        title: "WordPress destination is not allowed",
+        status: 422,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof WordPressAuthenticationError) {
+      return reply.status(422).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/wordpress-authentication-failed",
+        title: "WordPress connection could not be verified",
+        status: 422,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof PublishingDestinationNotFoundError) {
+      return reply.status(404).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/publishing-destination-not-found",
+        title: "Publishing destination not found",
+        status: 404,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof PublicationInProgressError) {
+      const retryAfter = Math.max(1, Math.ceil((error.retryAt.getTime() - Date.now()) / 1_000));
+      return reply
+        .header("retry-after", String(retryAfter))
+        .status(409)
+        .type("application/problem+json")
+        .send({
+          type: "https://profitpilot.app/problems/publication-in-progress",
+          title: "WordPress publication is in progress",
+          status: 409,
+          detail: error.message,
+          requestId: request.id,
+        });
+    }
+
+    if (
+      error instanceof PublicationContentStateError ||
+      error instanceof PublicationIdempotencyConflictError ||
+      error instanceof PublicationLeaseLostError ||
+      error instanceof WordPressDraftConflictError
+    ) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/wordpress-publication-conflict",
+        title: "WordPress publication conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (
+      error instanceof WordPressUnavailableError ||
+      error instanceof WordPressPublicationConfigurationError
+    ) {
+      request.log.error({ err: error }, "WordPress publication unavailable");
+      return reply.status(503).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/wordpress-unavailable",
+        title: "WordPress publication is unavailable",
+        status: 503,
         detail: error.message,
         requestId: request.id,
       });
@@ -554,6 +659,42 @@ export async function buildServer({
   );
 
   server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/connections/wordpress/test",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "connections:manage");
+      const connection = testWordPressConnectionSchema.parse(request.body);
+      return wordpressConnectionTestResponseSchema.parse(
+        await publicationService.testConnection(connection),
+      );
+    },
+  );
+
+  server.put<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/destinations/wordpress",
+    async (request) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "connections:manage");
+      const destination = configureWordPressDestinationSchema.parse(request.body);
+      return wordpressDestinationSchema.parse(
+        await publicationService.configureDestination(context, destination),
+      );
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
     "/v1/workspaces/:workspaceId/content/drafts",
     {
       config: {
@@ -643,6 +784,37 @@ export async function buildServer({
         await contentReviewService.approve(context, contentId, input, idempotencyKey),
       );
       return reply.status(result.replayed ? 200 : 201).send(result);
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string; contentId: string } }>(
+    "/v1/workspaces/:workspaceId/content/:contentId/publications/wordpress-draft",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const contentId = identifierSchema.parse(request.params.contentId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:publish");
+      const idempotencyHeader = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
+      );
+      const input = createWordPressDraftSchema.parse(request.body);
+      const result = wordpressDraftPublicationSchema.parse(
+        await publicationService.createDraft(context, contentId, input, idempotencyKey),
+      );
+      return reply
+        .status(result.replayed ? 200 : 201)
+        .header("location", `/v1/publications/${result.publicationId}`)
+        .send(result);
     },
   );
 

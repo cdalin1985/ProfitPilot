@@ -11,6 +11,12 @@ const accessTokenSchema = z.string().trim().min(20).max(4096);
 const structuredSecretSchema = z.object({ accessToken: accessTokenSchema });
 const apiKeySchema = z.string().trim().min(20).max(4096);
 const structuredApiKeySchema = z.object({ apiKey: apiKeySchema });
+const wordpressUsernameSchema = z.string().trim().min(1).max(255);
+const wordpressApplicationPasswordSchema = z.string().trim().min(20).max(512);
+const wordpressCredentialSchema = z.object({
+  username: wordpressUsernameSchema,
+  applicationPassword: wordpressApplicationPasswordSchema,
+});
 
 export interface AwinCredentialResolver {
   resolveAccessToken(secretReference: string): Promise<string>;
@@ -20,11 +26,20 @@ export interface OpenAICredentialResolver {
   resolveApiKey(secretReference: string): Promise<string>;
 }
 
+export interface WordPressCredentials {
+  username: string;
+  applicationPassword: string;
+}
+
+export interface WordPressCredentialResolver {
+  resolveCredentials(secretReference: string): Promise<WordPressCredentials>;
+}
+
 export class SecretResolutionError extends Error {
   readonly code = "secret_resolution_failed";
 
   constructor() {
-    super("The Awin credential could not be loaded from the configured secret store");
+    super("The credential could not be loaded from the configured secret store");
     this.name = "SecretResolutionError";
   }
 }
@@ -53,6 +68,14 @@ function parseApiKey(value: string): string {
 
   try {
     return structuredApiKeySchema.parse(JSON.parse(value)).apiKey;
+  } catch {
+    throw new SecretResolutionError();
+  }
+}
+
+function parseWordPressCredentials(value: string): WordPressCredentials {
+  try {
+    return wordpressCredentialSchema.parse(JSON.parse(value));
   } catch {
     throw new SecretResolutionError();
   }
@@ -103,6 +126,18 @@ export function createOpenAICredentialResolver(
   return {
     async resolveApiKey(secretReference) {
       return parseApiKey(await readSecret(secretReference));
+    },
+  };
+}
+
+export function createWordPressCredentialResolver(
+  config: Pick<ApiConfig, "AWS_REGION">,
+  client?: SecretsManagerReader,
+): WordPressCredentialResolver {
+  const readSecret = createSecretReader(config, client);
+  return {
+    async resolveCredentials(secretReference) {
+      return parseWordPressCredentials(await readSecret(secretReference));
     },
   };
 }

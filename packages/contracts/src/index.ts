@@ -406,3 +406,69 @@ export const contentDraftResponseSchema = z.object({
 
 export type CreateContentDraft = z.infer<typeof createContentDraftSchema>;
 export type ContentDraftResponse = z.infer<typeof contentDraftResponseSchema>;
+
+const wordpressSiteUrlSchema = z.string().trim().url().max(2_048);
+const wordpressUsernameSchema = z.string().trim().min(1).max(255);
+const wordpressApplicationPasswordSchema = z.string().trim().min(20).max(512);
+
+export const testWordPressConnectionSchema = z.object({
+  siteUrl: wordpressSiteUrlSchema,
+  username: wordpressUsernameSchema,
+  applicationPassword: wordpressApplicationPasswordSchema,
+});
+
+export const wordpressConnectionTestResponseSchema = z.object({
+  provider: z.literal("wordpress"),
+  status: z.literal("verified"),
+  siteUrl: wordpressSiteUrlSchema,
+  user: z.object({
+    id: z.number().int().positive(),
+    name: z.string().min(1).max(255),
+  }),
+  verifiedAt: z.string().datetime(),
+});
+
+export const configureWordPressDestinationSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  siteUrl: wordpressSiteUrlSchema,
+  secretReference: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2_048)
+    .refine((value) => !/[\r\n\0]/.test(value), "Enter a valid secret reference"),
+});
+
+export const wordpressDestinationSchema = z.object({
+  id: identifierSchema,
+  type: z.literal("wordpress"),
+  name: z.string().min(1).max(120),
+  siteUrl: wordpressSiteUrlSchema,
+  status: z.literal("active"),
+  verifiedAt: z.string().datetime(),
+});
+
+export const createWordPressDraftSchema = z.object({
+  destinationId: identifierSchema,
+  revisionId: identifierSchema,
+});
+
+export const wordpressDraftPublicationSchema = z.object({
+  publicationId: identifierSchema,
+  contentId: identifierSchema,
+  revisionId: identifierSchema,
+  destinationId: identifierSchema,
+  status: z.literal("draft_created"),
+  remotePostId: z.string().min(1).max(255),
+  remoteSlug: z.string().min(1).max(200),
+  remoteUrl: z.string().url(),
+  createdAt: z.string().datetime(),
+  replayed: z.boolean(),
+});
+
+export type TestWordPressConnection = z.infer<typeof testWordPressConnectionSchema>;
+export type WordPressConnectionTestResponse = z.infer<typeof wordpressConnectionTestResponseSchema>;
+export type ConfigureWordPressDestination = z.infer<typeof configureWordPressDestinationSchema>;
+export type WordPressDestination = z.infer<typeof wordpressDestinationSchema>;
+export type CreateWordPressDraft = z.infer<typeof createWordPressDraftSchema>;
+export type WordPressDraftPublication = z.infer<typeof wordpressDraftPublicationSchema>;

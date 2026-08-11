@@ -11,6 +11,7 @@ import type { IdentityProvider } from "./identity.js";
 import { buildServer } from "./server.js";
 import type { AwinClient } from "./awin.js";
 import type { ProductIngestionService } from "./product-ingestion.js";
+import type { PublicationService } from "./publication.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -397,6 +398,141 @@ describe("API server", () => {
       developmentSession.tenant,
       developmentContentReview.id,
       { revisionId: developmentContentReview.revisionId },
+      idempotencyKey,
+    );
+  });
+
+  it("runs a tenant-authorized read-only WordPress connection test", async () => {
+    const testConnection = vi.fn(async (input) => ({
+      provider: "wordpress" as const,
+      status: "verified" as const,
+      siteUrl: input.siteUrl,
+      user: { id: 42, name: "Publisher Bot" },
+      verifiedAt: "2026-08-11T12:00:00.000Z",
+    }));
+    const publicationService = {
+      testConnection,
+      async configureDestination() {
+        throw new Error("unused");
+      },
+      async createDraft() {
+        throw new Error("unused");
+      },
+    } satisfies PublicationService;
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      publicationService,
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/connections/wordpress/test`,
+      payload: {
+        siteUrl: "https://publisher.example.com",
+        username: "publisher",
+        applicationPassword: "abcd efgh ijkl mnop qrst uvwx",
+      },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ provider: "wordpress", status: "verified" });
+    expect(testConnection).toHaveBeenCalledOnce();
+  });
+
+  it("stores a verified WordPress destination by secret reference", async () => {
+    const destinationId = "018f6d4d-74d4-7c18-a1d4-bb620a63d103";
+    const configureDestination = vi.fn(async (_context, input) => ({
+      id: destinationId,
+      type: "wordpress" as const,
+      name: input.name,
+      siteUrl: input.siteUrl,
+      status: "active" as const,
+      verifiedAt: "2026-08-11T12:00:00.000Z",
+    }));
+    const publicationService = {
+      async testConnection() {
+        throw new Error("unused");
+      },
+      configureDestination,
+      async createDraft() {
+        throw new Error("unused");
+      },
+    } satisfies PublicationService;
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      publicationService,
+    });
+
+    const response = await server.inject({
+      method: "PUT",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/destinations/wordpress`,
+      payload: {
+        name: "Northstar WordPress",
+        siteUrl: "https://publisher.example.com",
+        secretReference: "profit-pilot/test/wordpress",
+      },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ id: destinationId, status: "active" });
+    expect(configureDestination).toHaveBeenCalledWith(
+      developmentSession.tenant,
+      expect.objectContaining({ secretReference: "profit-pilot/test/wordpress" }),
+    );
+  });
+
+  it("creates an idempotent WordPress draft for an approved revision", async () => {
+    const destinationId = "018f6d4d-74d4-7c18-a1d4-bb620a63d103";
+    const publicationId = "018f6d4d-74d4-7c18-a1d4-bb620a63d104";
+    const createDraft = vi.fn(async (_context, contentId, input) => ({
+      publicationId,
+      contentId,
+      revisionId: input.revisionId,
+      destinationId: input.destinationId,
+      status: "draft_created" as const,
+      remotePostId: "92",
+      remoteSlug: "best-commuter-mug-018f6d4d74d4",
+      remoteUrl: "https://publisher.example.com/?p=92",
+      createdAt: "2026-08-11T12:00:00.000Z",
+      replayed: false,
+    }));
+    const publicationService = {
+      async testConnection() {
+        throw new Error("unused");
+      },
+      async configureDestination() {
+        throw new Error("unused");
+      },
+      createDraft,
+    } satisfies PublicationService;
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      publicationService,
+    });
+    const idempotencyKey = "018f6d4d-74d4-7c18-a1d4-bb620a63f503";
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/content/${developmentContentReview.id}/publications/wordpress-draft`,
+      headers: { "idempotency-key": idempotencyKey },
+      payload: { destinationId, revisionId: developmentContentReview.revisionId },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.headers.location).toBe(`/v1/publications/${publicationId}`);
+    expect(createDraft).toHaveBeenCalledWith(
+      developmentSession.tenant,
+      developmentContentReview.id,
+      { destinationId, revisionId: developmentContentReview.revisionId },
       idempotencyKey,
     );
   });
