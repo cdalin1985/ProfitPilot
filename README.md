@@ -27,22 +27,25 @@ infra/
 
 - Node.js 24
 - pnpm 11
-- Docker Desktop or another Compose-compatible runtime for PostgreSQL and Redis
+- Windows PowerShell 5.1 or newer for the recommended native PostgreSQL workflow
+- Docker Desktop or another Compose-compatible runtime only when exercising the future Redis dependency locally
 
 ## Local startup
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up -d
 pnpm install --frozen-lockfile
-$env:DATABASE_ADMIN_URL="postgresql://profit_pilot_admin:profit_pilot_admin_local@127.0.0.1:5432/profit_pilot"
-pnpm --filter @profit-pilot/db db:migrate
+pnpm db:local:start
 pnpm dev
 ```
 
 The web application listens on `http://localhost:3000`; the API listens on `http://127.0.0.1:4000`.
 
+`pnpm db:local:start` downloads the pinned EDB PostgreSQL 17 binary archive into the ignored `.data` directory, verifies its SHA-256 checksum, rejects unsafe archive paths, initializes a password-authenticated cluster bound to `127.0.0.1`, creates the same local roles as Compose, and applies migrations. Stop it with `pnpm db:local:stop`. Docker Compose remains available as an optional production-parity path when Redis enters an active vertical slice.
+
 Local authentication is a deliberate development mode with one fixed tenant context. `NODE_ENV=production` rejects `AUTH_MODE=development`.
+
+The root `dev` command loads the ignored root `.env` with Node's native environment-file support and Turbo passes only the documented variables to each service. To exercise the real WorkOS staging boundary locally, follow [WorkOS staging activation](docs/operations/WORKOS_STAGING.md); do not paste credentials into chat or commit `.env`.
 
 For the exact ownership handoff and account-dependent sequence, use [Start here](docs/operations/START_HERE.md).
 
@@ -64,7 +67,7 @@ Production configuration is supplied through the deployment platform and AWS Sec
 - `AUTH_MODE=oidc`
 - `AUTH_JWKS_URL`
 - `AUTH_ISSUER`
-- `AUTH_AUDIENCE`
+- `AUTH_AUDIENCE` (`urn:profit-pilot:control-plane`; emitted by the WorkOS JWT template)
 - `WORKOS_CLIENT_ID`
 - `WORKOS_API_KEY`
 - `WORKOS_COOKIE_PASSWORD` (at least 32 random characters)

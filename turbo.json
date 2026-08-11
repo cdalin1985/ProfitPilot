@@ -4,14 +4,41 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "dist/**"],
-      "env": ["NODE_ENV", "NEXT_PUBLIC_API_BASE_URL"]
+      "env": [
+        "NODE_ENV",
+        "NEXT_PUBLIC_API_BASE_URL",
+        "NEXT_PUBLIC_WORKOS_REDIRECT_URI",
+        "WORKOS_CLIENT_ID"
+      ]
     },
     "check": {
       "dependsOn": ["lint", "typecheck", "test"]
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "env": [
+        "NODE_ENV",
+        "HOST",
+        "PORT",
+        "LOG_LEVEL",
+        "AUTH_MODE",
+        "AUTH_JWKS_URL",
+        "AUTH_ISSUER",
+        "AUTH_AUDIENCE",
+        "WORKOS_CLIENT_ID",
+        "WORKOS_API_KEY",
+        "WORKOS_COOKIE_PASSWORD",
+        "NEXT_PUBLIC_WORKOS_REDIRECT_URI",
+        "WORKOS_OWNER_ROLE_SLUG",
+        "AUDIT_IP_HASH_KEY",
+        "ALLOWED_ORIGINS",
+        "DATABASE_ADMIN_URL",
+        "DATABASE_URL",
+        "DATABASE_POOL_SIZE",
+        "NEXT_PUBLIC_API_BASE_URL",
+        "API_BASE_URL"
+      ]
     },
     "lint": {
       "dependsOn": ["^build", "^lint"],

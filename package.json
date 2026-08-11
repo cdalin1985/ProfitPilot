@@ -12,7 +12,9 @@
   "scripts": {
     "build": "turbo run build",
     "check": "turbo run check",
-    "dev": "turbo run dev --parallel",
+    "db:local:start": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-postgres-native.ps1",
+    "db:local:stop": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/stop-postgres-native.ps1",
+    "dev": "node --env-file-if-exists=.env ./node_modules/turbo/bin/turbo run dev --parallel",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "turbo run lint",
