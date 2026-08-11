@@ -27,20 +27,21 @@ infra/
 
 - Node.js 24
 - pnpm 11
-- Docker Desktop or another Compose-compatible runtime for PostgreSQL and Redis
+- Windows PowerShell 5.1 or newer for the recommended native PostgreSQL workflow
+- Docker Desktop or another Compose-compatible runtime only when exercising the future Redis dependency locally
 
 ## Local startup
 
 ```powershell
 Copy-Item .env.example .env
-docker compose up -d
 pnpm install --frozen-lockfile
-$env:DATABASE_ADMIN_URL="postgresql://profit_pilot_admin:profit_pilot_admin_local@127.0.0.1:5432/profit_pilot"
-pnpm --filter @profit-pilot/db db:migrate
+pnpm db:local:start
 pnpm dev
 ```
 
 The web application listens on `http://localhost:3000`; the API listens on `http://127.0.0.1:4000`.
+
+`pnpm db:local:start` downloads the pinned EDB PostgreSQL 17 binary archive into the ignored `.data` directory, verifies its SHA-256 checksum, rejects unsafe archive paths, initializes a password-authenticated cluster bound to `127.0.0.1`, creates the same local roles as Compose, and applies migrations. Stop it with `pnpm db:local:stop`. Docker Compose remains available as an optional production-parity path when Redis enters an active vertical slice.
 
 Local authentication is a deliberate development mode with one fixed tenant context. `NODE_ENV=production` rejects `AUTH_MODE=development`.
 

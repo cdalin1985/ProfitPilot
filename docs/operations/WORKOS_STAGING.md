@@ -43,11 +43,11 @@ Never paste the API key into chat, a GitHub issue, a pull request, source code, 
 Start dependencies, apply migrations, and launch the services:
 
 ```powershell
-docker compose up -d
-$env:DATABASE_ADMIN_URL="postgresql://profit_pilot_admin:profit_pilot_admin_local@127.0.0.1:5432/profit_pilot"
-pnpm --filter @profit-pilot/db db:migrate
+pnpm db:local:start
 pnpm dev
 ```
+
+The native database helper is the recommended Windows path. It uses the pinned official EDB PostgreSQL 17 archive, verifies its checksum before extraction, stores binaries and data only under the ignored `.data` directory, binds PostgreSQL to `127.0.0.1`, creates the same roles as Compose, and applies all migrations. Use `pnpm db:local:stop` for a clean shutdown. Redis remains in `compose.yaml` for later vertical slices but is not required by the current WorkOS onboarding path.
 
 Verify the following in order:
 
