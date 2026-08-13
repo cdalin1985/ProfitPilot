@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   affiliateConnections,
+  affiliateLinks,
   auditEvents,
   contentItems,
   contentGenerationRequests,
   contentReviewActions,
   contentRevisions,
+  clickEvents,
   evidenceRecords,
   feedSyncStates,
   onboardingRequests,
@@ -21,6 +23,8 @@ import {
 describe("tenant-owned database tables", () => {
   it.each([
     ["affiliateConnections", affiliateConnections],
+    ["affiliateLinks", affiliateLinks],
+    ["clickEvents", clickEvents],
     ["contentGenerationRequests", contentGenerationRequests],
     ["contentReviewActions", contentReviewActions],
     ["feedSyncStates", feedSyncStates],

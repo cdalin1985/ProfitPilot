@@ -64,6 +64,13 @@
       "when": 1786486637898,
       "tag": "0008_purple_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786658400000,
+      "tag": "0009_signed_click_attribution",
+      "breakpoints": true
     }
   ]
 }

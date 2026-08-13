@@ -31,6 +31,9 @@ const configSchema = z
       .refine((value) => !/[\r\n\0]/.test(value))
       .optional(),
     OPENAI_GENERATION_MODEL: z.string().trim().min(1).max(120).default("gpt-5.6"),
+    PUBLIC_REDIRECT_BASE_URL: z.string().url().default("http://localhost:4100"),
+    CLICK_SIGNING_KEY_ID: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/).default("development"),
+    CLICK_SIGNING_KEY: z.string().min(43).optional(),
   })
   .superRefine((value, context) => {
     if (value.NODE_ENV === "production" && value.AUTH_MODE !== "oidc") {
@@ -72,6 +75,9 @@ const configSchema = z
         path: ["AUDIT_IP_HASH_KEY"],
         message: "Production requires AUDIT_IP_HASH_KEY",
       });
+    }
+    if (value.NODE_ENV === "production" && !value.CLICK_SIGNING_KEY) {
+      context.addIssue({ code: "custom", path: ["CLICK_SIGNING_KEY"], message: "Production requires CLICK_SIGNING_KEY from the deployment secret manager" });
     }
   });
 

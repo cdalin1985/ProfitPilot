@@ -1,0 +1,6 @@
+{
+  "name": "@profit-pilot/event-ingestion", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": { "build": "tsc -p tsconfig.json", "dev": "tsx watch src/main.ts", "lint": "tsc -p tsconfig.json --noEmit", "start": "node dist/main.js", "test": "vitest run src", "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": { "@fastify/helmet": "13.1.0", "@fastify/rate-limit": "11.1.0", "@profit-pilot/contracts": "workspace:*", "@profit-pilot/db": "workspace:*", "fastify": "5.10.0", "zod": "catalog:" },
+  "devDependencies": { "tsx": "catalog:", "typescript": "catalog:", "vitest": "catalog:" }
+}

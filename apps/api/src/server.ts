@@ -16,6 +16,8 @@ import {
   configureWordPressDestinationSchema,
   createContentDraftSchema,
   createWordPressDraftSchema,
+  createAffiliateLinkSchema,
+  affiliateLinkSchema,
   createOrganizationWorkspaceSchema,
   identifierSchema,
   importAwinFeedSchema,
@@ -46,6 +48,9 @@ import {
   PublicationInProgressError,
   PublicationLeaseLostError,
   PublishingDestinationNotFoundError,
+  AffiliateLinkNotFoundError,
+  AffiliateLinkStateError,
+  AffiliateLinkIdempotencyConflictError,
 } from "@profit-pilot/db";
 import { developmentOverview } from "@profit-pilot/fixtures";
 
@@ -97,6 +102,7 @@ import {
   WordPressDraftConflictError,
   WordPressUnavailableError,
 } from "./wordpress.js";
+import { createClickAttributionService, type ClickAttributionService } from "./click-attribution.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -108,6 +114,7 @@ export interface ServerDependencies {
   contentGenerationService?: ContentGenerationService;
   contentReviewService?: ContentReviewService;
   publicationService?: PublicationService;
+  clickAttributionService?: ClickAttributionService;
 }
 
 export async function buildServer({
@@ -130,6 +137,7 @@ export async function buildServer({
     createWordPressClient(),
     createWordPressCredentialResolver(config),
   ),
+  clickAttributionService = createClickAttributionService(config),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -389,6 +397,13 @@ export async function buildServer({
         detail: error.message,
         requestId: request.id,
       });
+    }
+
+    if (error instanceof AffiliateLinkNotFoundError) {
+      return reply.status(404).type("application/problem+json").send({ type: "https://profitpilot.app/problems/affiliate-link-not-found", title: "Affiliate link not found", status: 404, requestId: request.id });
+    }
+    if (error instanceof AffiliateLinkStateError || error instanceof AffiliateLinkIdempotencyConflictError) {
+      return reply.status(409).type("application/problem+json").send({ type: "https://profitpilot.app/problems/affiliate-link-conflict", title: "Affiliate link conflict", status: 409, detail: error.message, requestId: request.id });
     }
 
     if (
@@ -764,6 +779,35 @@ export async function buildServer({
         await contentReviewService.requestChanges(context, contentId, input, idempotencyKey),
       );
       return reply.status(result.replayed ? 200 : 201).send(result);
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string; contentId: string } }>(
+    "/v1/workspaces/:workspaceId/content/:contentId/affiliate-links",
+    { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const contentId = identifierSchema.parse(request.params.contentId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:publish");
+      const header = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(typeof header === "string" ? header : undefined);
+      const result = affiliateLinkSchema.parse(await clickAttributionService.createLink(context, contentId, createAffiliateLinkSchema.parse(request.body), idempotencyKey));
+      return reply.status(result.replayed ? 200 : 201).header("location", `/v1/affiliate-links/${result.linkId}`).send(result);
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string; linkId: string } }>(
+    "/v1/workspaces/:workspaceId/affiliate-links/:linkId/revoke",
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const linkId = identifierSchema.parse(request.params.linkId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:publish");
+      await clickAttributionService.revokeLink(context, linkId);
+      return reply.status(204).send();
     },
   );
 
