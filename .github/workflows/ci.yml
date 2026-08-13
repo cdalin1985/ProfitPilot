@@ -105,6 +105,7 @@ jobs:
             GRANT USAGE ON TYPES TO profit_pilot_integration;
           SQL
       - run: pnpm --filter @profit-pilot/db db:migrate
+      - run: pnpm --filter @profit-pilot/contracts build
       - run: pnpm --filter @profit-pilot/db test:integration
 
   infrastructure:

@@ -18,6 +18,7 @@ import {
   type ReserveWordPressPublicationResult,
   type WordPressPublicationReservation,
 } from "@profit-pilot/db";
+import escapeHtml from "escape-html";
 
 import type { ApiConfig } from "./config.js";
 import type { WordPressCredentialResolver } from "./secrets.js";
@@ -85,18 +86,9 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function escapeHtml(value: unknown): string {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 function paragraph(value: unknown): string {
   const text = typeof value === "string" ? value : record(value).text;
-  const escaped = escapeHtml(text).trim();
+  const escaped = escapeHtml(String(text ?? "")).trim();
   return escaped ? `<!-- wp:paragraph -->\n<p>${escaped}</p>\n<!-- /wp:paragraph -->` : "";
 }
 
@@ -111,7 +103,7 @@ export function renderGutenbergArticle(body: unknown): string {
   if (Array.isArray(source.sections)) {
     for (const item of source.sections) {
       const section = record(item);
-      const heading = escapeHtml(section.heading).trim();
+      const heading = escapeHtml(String(section.heading ?? "")).trim();
       if (heading) {
         blocks.push(`<!-- wp:heading -->\n<h2>${heading}</h2>\n<!-- /wp:heading -->`);
       }
