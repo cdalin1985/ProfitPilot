@@ -214,6 +214,7 @@ export const opportunitySchema = z.object({
   score: z.number().int().min(0).max(100),
   commissionRate: z.number().min(0).max(100),
   averageCommission: z.number().nonnegative(),
+  commissionCurrency: z.string().length(3),
   observedAt: z.string().datetime(),
   freshnessTrend: freshnessTrendSchema,
 });
@@ -226,6 +227,7 @@ export const queueItemSchema = z.object({
   subject: z.string().min(1).max(240),
   status: z.enum(["needs_review", "ready_to_publish", "needs_reconnect"]),
   occurredAt: z.string().datetime(),
+  href: z.string().startsWith("/"),
 });
 
 export type QueueItem = z.infer<typeof queueItemSchema>;
@@ -235,8 +237,9 @@ export const overviewSchema = z.object({
     qualifiedClicks: z.number().int().nonnegative(),
     commissionAmount: z.number().nonnegative(),
     commissionCurrency: z.string().length(3),
+    commissionAvailable: z.boolean(),
     contentAwaitingReview: z.number().int().nonnegative(),
-    publishingHealthPercent: z.number().min(0).max(100),
+    publishingHealthPercent: z.number().min(0).max(100).nullable(),
   }),
   opportunities: z.array(opportunitySchema).max(20),
   queue: z.array(queueItemSchema).max(20),

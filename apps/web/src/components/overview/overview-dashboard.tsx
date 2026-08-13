@@ -45,7 +45,10 @@ export function OverviewDashboard({ overview }: OverviewDashboardProps): React.R
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
           </div>
-          <OpportunityTable opportunities={overview.opportunities} />
+          <OpportunityTable
+            generatedAt={overview.generatedAt}
+            opportunities={overview.opportunities.slice(0, 3)}
+          />
         </section>
         <section className="min-w-0 border-t py-6 xl:border-t-0" aria-labelledby="queue-title">
           <div className="mb-3 flex items-center justify-between gap-4 px-4">
@@ -60,7 +63,7 @@ export function OverviewDashboard({ overview }: OverviewDashboardProps): React.R
               <ArrowRight aria-hidden="true" className="size-4" />
             </Link>
           </div>
-          <QueueList items={overview.queue} />
+          <QueueList generatedAt={overview.generatedAt} items={overview.queue} />
         </section>
       </div>
       <PipelineBand pipeline={overview.pipeline} />

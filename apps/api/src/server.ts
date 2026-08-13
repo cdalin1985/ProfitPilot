@@ -21,6 +21,7 @@ import {
   createOrganizationWorkspaceSchema,
   identifierSchema,
   importAwinFeedSchema,
+  overviewSchema,
   requestContentChangesSchema,
   testAwinConnectionSchema,
   testWordPressConnectionSchema,
@@ -52,7 +53,6 @@ import {
   AffiliateLinkStateError,
   AffiliateLinkIdempotencyConflictError,
 } from "@profit-pilot/db";
-import { developmentOverview } from "@profit-pilot/fixtures";
 
 import {
   ApplicationDependencyError,
@@ -106,6 +106,7 @@ import {
   createClickAttributionService,
   type ClickAttributionService,
 } from "./click-attribution.js";
+import { createOverviewService, type OverviewService } from "./overview.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -118,6 +119,7 @@ export interface ServerDependencies {
   contentReviewService?: ContentReviewService;
   publicationService?: PublicationService;
   clickAttributionService?: ClickAttributionService;
+  overviewService?: OverviewService;
 }
 
 export async function buildServer({
@@ -141,6 +143,7 @@ export async function buildServer({
     createWordPressCredentialResolver(config),
   ),
   clickAttributionService = createClickAttributionService(config),
+  overviewService = createOverviewService(config),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -403,24 +406,30 @@ export async function buildServer({
     }
 
     if (error instanceof AffiliateLinkNotFoundError) {
-      return reply.status(404).type("application/problem+json").send({
-        type: "https://profitpilot.app/problems/affiliate-link-not-found",
-        title: "Affiliate link not found",
-        status: 404,
-        requestId: request.id,
-      });
+      return reply
+        .status(404)
+        .type("application/problem+json")
+        .send({
+          type: "https://profitpilot.app/problems/affiliate-link-not-found",
+          title: "Affiliate link not found",
+          status: 404,
+          requestId: request.id,
+        });
     }
     if (
       error instanceof AffiliateLinkStateError ||
       error instanceof AffiliateLinkIdempotencyConflictError
     ) {
-      return reply.status(409).type("application/problem+json").send({
-        type: "https://profitpilot.app/problems/affiliate-link-conflict",
-        title: "Affiliate link conflict",
-        status: 409,
-        detail: error.message,
-        requestId: request.id,
-      });
+      return reply
+        .status(409)
+        .type("application/problem+json")
+        .send({
+          type: "https://profitpilot.app/problems/affiliate-link-conflict",
+          title: "Affiliate link conflict",
+          status: 409,
+          detail: error.message,
+          requestId: request.id,
+        });
     }
 
     if (
@@ -626,18 +635,8 @@ export async function buildServer({
       const actor = await identityProvider.authenticate(request);
       const workspaceId = identifierSchema.parse(request.params.workspaceId);
       const context = await services.resolveTenant(actor, workspaceId);
-      assertCan(context, "opportunities:read");
-
-      if (config.NODE_ENV === "production") {
-        return reply.status(501).type("application/problem+json").send({
-          type: "https://profitpilot.app/problems/repository-unavailable",
-          title: "Overview repository is not configured",
-          status: 501,
-          requestId: request.id,
-        });
-      }
-
-      return developmentOverview;
+      assertCan(context, "analytics:read");
+      return overviewSchema.parse(await overviewService.get(context));
     },
   );
 

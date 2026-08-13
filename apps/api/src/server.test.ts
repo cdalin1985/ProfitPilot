@@ -13,6 +13,7 @@ import type { AwinClient } from "./awin.js";
 import type { ProductIngestionService } from "./product-ingestion.js";
 import type { PublicationService } from "./publication.js";
 import type { ClickAttributionService } from "./click-attribution.js";
+import type { OverviewService } from "./overview.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -89,8 +90,24 @@ describe("API server", () => {
   });
 
   it("returns the tenant-scoped development overview", async () => {
+    const get = vi.fn(async () => ({
+      metrics: {
+        qualifiedClicks: 42,
+        commissionAmount: 0,
+        commissionCurrency: "USD",
+        commissionAvailable: false,
+        contentAwaitingReview: 0,
+        publishingHealthPercent: null,
+      },
+      opportunities: [],
+      queue: [],
+      pipeline: { draft: 0, inReview: 0, approved: 0, scheduled: 0, published: 0 },
+      generatedAt: "2026-08-13T18:00:00.000Z",
+    }));
+    const overviewService: OverviewService = { get };
     const server = await buildServer({
       config: testConfig(),
+      overviewService,
     });
 
     const response = await server.inject({
@@ -100,7 +117,34 @@ describe("API server", () => {
     await server.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().metrics.qualifiedClicks).toBe(18_420);
+    expect(response.json().metrics).toMatchObject({
+      qualifiedClicks: 42,
+      commissionAvailable: false,
+      publishingHealthPercent: null,
+    });
+    expect(get).toHaveBeenCalledWith(developmentSession.tenant);
+  });
+
+  it("requires analytics permission for overview data", async () => {
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices({
+        async resolveTenant() {
+          return {
+            ...developmentSession.tenant,
+            organizationRole: "member",
+            workspaceRole: "contributor",
+          };
+        },
+      }),
+    });
+    const response = await server.inject({
+      method: "GET",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/overview`,
+    });
+    await server.close();
+    expect(response.statusCode).toBe(403);
   });
 
   it("rejects cross-workspace requests", async () => {
