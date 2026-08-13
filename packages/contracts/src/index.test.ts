@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   createOrganizationWorkspaceSchema,
+  importAwinFeedSchema,
   opportunitySchema,
   problemDetailsSchema,
   tenantContextSchema,
@@ -115,6 +116,27 @@ describe("public contracts", () => {
         userId: "018f6d4d-74d4-7c18-a1d4-bb620a63b003",
         organizationRole: "editor",
         workspaceRole: null,
+      }),
+    ).toThrow();
+  });
+
+  it("validates Awin feed identifiers and canonical locales", () => {
+    expect(
+      importAwinFeedSchema.parse({
+        connectionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        publisherId: 1234,
+        advertiserId: 5678,
+        locale: "en_US",
+        commissionRate: 8.5,
+      }),
+    ).toMatchObject({ locale: "en_US", commissionRate: 8.5 });
+
+    expect(() =>
+      importAwinFeedSchema.parse({
+        connectionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        publisherId: 1234,
+        advertiserId: 5678,
+        locale: "english_US",
       }),
     ).toThrow();
   });
