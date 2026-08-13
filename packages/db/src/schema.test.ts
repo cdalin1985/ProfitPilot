@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   affiliateConnections,
   affiliateLinks,
+  billingAccounts,
+  billingWebhookEvents,
   auditEvents,
   contentItems,
   contentGenerationRequests,
@@ -13,6 +15,7 @@ import {
   evidenceRecords,
   feedSyncStates,
   onboardingRequests,
+  organizationEntitlements,
   opportunities,
   products,
   publications,
@@ -24,6 +27,8 @@ describe("tenant-owned database tables", () => {
   it.each([
     ["affiliateConnections", affiliateConnections],
     ["affiliateLinks", affiliateLinks],
+    ["billingAccounts", billingAccounts],
+    ["billingWebhookEvents", billingWebhookEvents],
     ["clickEvents", clickEvents],
     ["contentGenerationRequests", contentGenerationRequests],
     ["contentReviewActions", contentReviewActions],
@@ -37,6 +42,7 @@ describe("tenant-owned database tables", () => {
     ["auditEvents", auditEvents],
     ["workspaceMemberships", workspaceMemberships],
     ["workspaceOnboardingSteps", workspaceOnboardingSteps],
+    ["organizationEntitlements", organizationEntitlements],
   ])("%s carries an organization boundary", (_name, table) => {
     expect(getTableColumns(table)).toHaveProperty("organizationId");
   });

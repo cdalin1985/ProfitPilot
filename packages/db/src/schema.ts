@@ -83,6 +83,30 @@ export const onboardingRequestStatus = pgEnum("onboarding_request_status", [
   "failed",
 ]);
 
+export const billingPlan = pgEnum("billing_plan", ["starter", "growth"]);
+
+export const billingSubscriptionStatus = pgEnum("billing_subscription_status", [
+  "incomplete",
+  "incomplete_expired",
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "unpaid",
+  "paused",
+]);
+
+export const entitlementKey = pgEnum("entitlement_key", [
+  "private_beta_access",
+  "awin_import",
+  "content_generation",
+  "wordpress_draft",
+  "click_tracking",
+  "overview_metrics",
+]);
+
+export const entitlementSource = pgEnum("entitlement_source", ["stripe", "manual_beta_grant"]);
+
 export const connectionStatus = pgEnum("connection_status", [
   "pending",
   "testing",
@@ -325,6 +349,93 @@ export const onboardingRequests = pgTable(
     uniqueIndex("onboarding_requests_organization_unique").on(table.organizationId),
     uniqueIndex("onboarding_requests_workspace_unique").on(table.workspaceId),
     check("onboarding_requests_attempt_count_nonnegative", sql`${table.attemptCount} >= 0`),
+  ],
+);
+
+export const billingAccounts = pgTable(
+  "billing_accounts",
+  {
+    organizationId: uuid("organization_id")
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    billingWorkspaceId: uuid("billing_workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "restrict" }),
+    stripeCustomerId: text("stripe_customer_id").notNull(),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripePriceId: text("stripe_price_id"),
+    stripeProductId: text("stripe_product_id"),
+    plan: billingPlan("plan"),
+    status: billingSubscriptionStatus("status"),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    lastStripeEventCreatedAt: timestamp("last_stripe_event_created_at", {
+      withTimezone: true,
+    }),
+    lastStripeEventId: text("last_stripe_event_id"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("billing_accounts_stripe_customer_unique").on(table.stripeCustomerId),
+    uniqueIndex("billing_accounts_stripe_subscription_unique").on(table.stripeSubscriptionId),
+    index("billing_accounts_workspace_idx").on(table.organizationId, table.billingWorkspaceId),
+  ],
+);
+
+export const billingWebhookEvents = pgTable(
+  "billing_webhook_events",
+  {
+    stripeEventId: text("stripe_event_id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    eventCreatedAt: timestamp("event_created_at", { withTimezone: true }).notNull(),
+    payloadSha256: text("payload_sha256").notNull(),
+    snapshot: jsonb("snapshot").notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("billing_webhook_events_tenant_time_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.eventCreatedAt,
+    ),
+    check("billing_webhook_events_hash_check", sql`${table.payloadSha256} ~ '^[a-f0-9]{64}$'`),
+  ],
+);
+
+export const organizationEntitlements = pgTable(
+  "organization_entitlements",
+  {
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: entitlementKey("key").notNull(),
+    source: entitlementSource("source").notNull(),
+    sourceReference: text("source_reference").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    limit: integer("limit"),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.key, table.source] }),
+    index("organization_entitlements_effective_idx").on(
+      table.organizationId,
+      table.enabled,
+      table.expiresAt,
+    ),
+    check(
+      "organization_entitlements_limit_positive",
+      sql`${table.limit} is null or ${table.limit} > 0`,
+    ),
   ],
 );
 

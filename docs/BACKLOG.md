@@ -25,7 +25,8 @@
 - PP-108: WordPress Application Password connection and draft publication.
 - PP-109: Signed click redirect and qualified-click event ingestion.
 - PP-110: Overview metrics backed by production repositories.
-- PP-111: Stripe Checkout, webhook projection, entitlements, and Customer Portal.
+- PP-111: Stripe Checkout, webhook projection, entitlements, and Customer Portal. Implemented;
+  production activation remains gated on Stripe account configuration and staging verification.
 - PP-112: Private-beta onboarding for 5–10 design partners.
 
 ## General-availability gates

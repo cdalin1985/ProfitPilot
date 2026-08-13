@@ -1,3 +1,5 @@
+import { Readable } from "node:stream";
+
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -28,6 +30,9 @@ import {
   wordpressConnectionTestResponseSchema,
   wordpressDestinationSchema,
   wordpressDraftPublicationSchema,
+  billingContextSchema,
+  createCheckoutSessionSchema,
+  hostedBillingSessionSchema,
 } from "@profit-pilot/contracts";
 import {
   AffiliateConnectionUnavailableError,
@@ -52,6 +57,9 @@ import {
   AffiliateLinkNotFoundError,
   AffiliateLinkStateError,
   AffiliateLinkIdempotencyConflictError,
+  BillingAccountUnavailableError,
+  BillingWebhookConflictError,
+  EntitlementDeniedError,
 } from "@profit-pilot/db";
 
 import {
@@ -63,6 +71,14 @@ import {
   type ApplicationServices,
 } from "./application-services.js";
 import type { ApiConfig } from "./config.js";
+import {
+  BillingConfigurationError,
+  BillingStateConflictError,
+  createBillingService,
+  createEntitlementService,
+  type BillingService,
+  type EntitlementService,
+} from "./billing.js";
 import {
   ContentGenerationConfigurationError,
   ContentGenerationUnavailableError,
@@ -93,6 +109,7 @@ import {
   createAwinCredentialResolver,
   createOpenAICredentialResolver,
   createWordPressCredentialResolver,
+  createStripeCredentialResolver,
   SecretResolutionError,
 } from "./secrets.js";
 import {
@@ -107,6 +124,7 @@ import {
   type ClickAttributionService,
 } from "./click-attribution.js";
 import { createOverviewService, type OverviewService } from "./overview.js";
+import { StripeUnavailableError, StripeWebhookSignatureError } from "./stripe.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -120,6 +138,8 @@ export interface ServerDependencies {
   publicationService?: PublicationService;
   clickAttributionService?: ClickAttributionService;
   overviewService?: OverviewService;
+  billingService?: BillingService;
+  entitlementService?: EntitlementService;
 }
 
 export async function buildServer({
@@ -144,7 +164,10 @@ export async function buildServer({
   ),
   clickAttributionService = createClickAttributionService(config),
   overviewService = createOverviewService(config),
+  billingService = createBillingService(config, createStripeCredentialResolver(config)),
+  entitlementService = createEntitlementService(config),
 }: ServerDependencies): Promise<FastifyInstance> {
+  const stripeWebhookBodies = new WeakMap<object, Buffer>();
   const server = Fastify({
     bodyLimit: 1_048_576,
     logger: {
@@ -243,6 +266,68 @@ export async function buildServer({
       return reply.status(503).type("application/problem+json").send({
         type: "https://profitpilot.app/problems/dependency-unavailable",
         title: "A required service is unavailable",
+        status: 503,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof EntitlementDeniedError) {
+      return reply.status(403).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/entitlement-required",
+        title: "Entitlement required",
+        status: 403,
+        detail: error.message,
+        entitlement: error.entitlement,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof BillingAccountUnavailableError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/billing-account-unavailable",
+        title: "Billing account unavailable",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof BillingStateConflictError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/billing-state-conflict",
+        title: "Billing state conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof StripeWebhookSignatureError) {
+      return reply.status(400).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/stripe-webhook-signature-invalid",
+        title: "Invalid Stripe webhook",
+        status: 400,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof BillingWebhookConflictError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/billing-webhook-conflict",
+        title: "Stripe webhook conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof BillingConfigurationError || error instanceof StripeUnavailableError) {
+      request.log.error({ err: error }, "billing dependency unavailable");
+      return reply.status(503).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/billing-unavailable",
+        title: "Billing unavailable",
         status: 503,
         detail: error.message,
         requestId: request.id,
@@ -594,6 +679,82 @@ export async function buildServer({
   });
 
   server.post(
+    "/v1/billing/webhooks/stripe",
+    {
+      config: { rateLimit: { max: 300, timeWindow: "1 minute" } },
+      preParsing: async (request, _reply, payload) => {
+        const chunks: Buffer[] = [];
+        for await (const chunk of payload) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const body = Buffer.concat(chunks);
+        stripeWebhookBodies.set(request.raw, body);
+        return Readable.from(body);
+      },
+    },
+    async (request) => {
+      const signature = request.headers["stripe-signature"];
+      const payload = stripeWebhookBodies.get(request.raw);
+      if (typeof signature !== "string" || !payload) throw new StripeWebhookSignatureError();
+      return billingService.handleWebhook(payload, signature);
+    },
+  );
+
+  server.get<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/billing",
+    async (request) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "billing:manage");
+      return billingContextSchema.parse(await billingService.getContext(context));
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/billing/checkout",
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "billing:manage");
+      const header = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof header === "string" ? header : undefined,
+      );
+      const result = hostedBillingSessionSchema.parse(
+        await billingService.createCheckout(
+          context,
+          createCheckoutSessionSchema.parse(request.body),
+          idempotencyKey,
+        ),
+      );
+      return reply.status(201).send(result);
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/billing/portal",
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "billing:manage");
+      const header = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof header === "string" ? header : undefined,
+      );
+      return reply
+        .status(201)
+        .send(
+          hostedBillingSessionSchema.parse(
+            await billingService.createPortal(context, idempotencyKey),
+          ),
+        );
+    },
+  );
+
+  server.post(
     "/v1/onboarding/organization-workspace",
     {
       config: {
@@ -630,6 +791,8 @@ export async function buildServer({
       const workspaceId = identifierSchema.parse(request.params.workspaceId);
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "analytics:read");
+      assertCan(context, "analytics:read");
+      await entitlementService.assert(context, "overview_metrics");
       return overviewSchema.parse(await overviewService.get(context));
     },
   );
@@ -677,6 +840,7 @@ export async function buildServer({
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "connections:manage");
       const input = importAwinFeedSchema.parse(request.body);
+      await entitlementService.assert(context, "awin_import");
       return awinFeedImportResponseSchema.parse(
         await productIngestionService.importAwinFeed(context, input),
       );
@@ -734,6 +898,7 @@ export async function buildServer({
       const workspaceId = identifierSchema.parse(request.params.workspaceId);
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "content:edit");
+      await entitlementService.assert(context, "content_generation");
       const idempotencyHeader = request.headers["idempotency-key"];
       const idempotencyKey = identifierSchema.parse(
         typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
@@ -801,6 +966,7 @@ export async function buildServer({
       const contentId = identifierSchema.parse(request.params.contentId);
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "content:publish");
+      await entitlementService.assert(context, "click_tracking");
       const header = request.headers["idempotency-key"];
       const idempotencyKey = identifierSchema.parse(
         typeof header === "string" ? header : undefined,
@@ -828,6 +994,7 @@ export async function buildServer({
       const linkId = identifierSchema.parse(request.params.linkId);
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "content:publish");
+      await entitlementService.assert(context, "click_tracking");
       await clickAttributionService.revokeLink(context, linkId);
       return reply.status(204).send();
     },
@@ -869,6 +1036,7 @@ export async function buildServer({
       const contentId = identifierSchema.parse(request.params.contentId);
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "content:publish");
+      await entitlementService.assert(context, "wordpress_draft");
       const idempotencyHeader = request.headers["idempotency-key"];
       const idempotencyKey = identifierSchema.parse(
         typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,

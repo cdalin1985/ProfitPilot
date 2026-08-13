@@ -71,6 +71,8 @@ Each stage must emit an audit event and preserve tenant context. External side e
 - Treat signed webhooks as the source of truth.
 - Project subscriptions into an entitlement table.
 - Enforce limits at API and worker boundaries, not only in the UI.
+- Follow [Stripe staging verification](STRIPE_STAGING_VERIFICATION.md); browser redirects never grant
+  access, and manual beta grants remain distinct from Stripe subscription state.
 
 ### 5. Prove the system in staging
 
