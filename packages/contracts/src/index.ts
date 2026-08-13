@@ -56,7 +56,8 @@ const canonicalLocaleSchema = z
     } catch {
       return false;
     }
-  }, "Enter a valid BCP 47 locale");
+  }, "Enter a valid BCP 47 locale")
+  .transform((value) => Intl.getCanonicalLocales(value)[0]!);
 
 const supportedCurrencySchema = z
   .string()
@@ -352,3 +353,30 @@ export type TestAwinConnection = z.infer<typeof testAwinConnectionSchema>;
 export type AwinConnectionTestResponse = z.infer<typeof awinConnectionTestResponseSchema>;
 export type ImportAwinFeed = z.infer<typeof importAwinFeedSchema>;
 export type AwinFeedImportResponse = z.infer<typeof awinFeedImportResponseSchema>;
+
+export const createContentDraftSchema = z.object({
+  opportunityId: identifierSchema,
+  title: z.string().trim().min(8).max(240),
+  contentType: z.enum(["article", "comparison", "roundup", "social"]),
+  locale: canonicalLocaleSchema,
+  brief: z.object({
+    audience: z.string().trim().min(3).max(240),
+    angle: z.string().trim().min(3).max(500),
+    tone: z.enum(["practical", "editorial", "concise", "technical"]),
+  }),
+});
+
+export const contentDraftResponseSchema = z.object({
+  contentId: identifierSchema,
+  revisionId: identifierSchema,
+  status: z.enum(["in_review", "changes_requested"]),
+  revision: z.number().int().positive(),
+  validationChecks: z.array(validationCheckSchema).length(5),
+  evidenceCount: z.number().int().nonnegative(),
+  promptVersion: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  replayed: z.boolean(),
+});
+
+export type CreateContentDraft = z.infer<typeof createContentDraftSchema>;
+export type ContentDraftResponse = z.infer<typeof contentDraftResponseSchema>;

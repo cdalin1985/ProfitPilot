@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createAwinCredentialResolver, SecretResolutionError } from "./secrets.js";
+import {
+  createAwinCredentialResolver,
+  createOpenAICredentialResolver,
+  SecretResolutionError,
+} from "./secrets.js";
 
 describe("Awin credential resolver", () => {
   it("loads a structured access token without exposing it in errors", async () => {
@@ -30,5 +34,20 @@ describe("Awin credential resolver", () => {
       .catch((value) => value);
     expect(error).toBeInstanceOf(SecretResolutionError);
     expect(String(error)).not.toContain("too-short");
+  });
+
+  it("loads a structured OpenAI API key from the same server-side boundary", async () => {
+    const resolver = createOpenAICredentialResolver(
+      { AWS_REGION: "us-east-1" },
+      {
+        async send() {
+          return { SecretString: JSON.stringify({ apiKey: "sk-test-0123456789abcdefghij" }) };
+        },
+      },
+    );
+
+    await expect(resolver.resolveApiKey("profit-pilot/test/openai")).resolves.toBe(
+      "sk-test-0123456789abcdefghij",
+    );
   });
 });

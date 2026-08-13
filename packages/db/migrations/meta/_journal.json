@@ -43,6 +43,13 @@
       "when": 1785936774096,
       "tag": "0005_fresh_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785939505063,
+      "tag": "0006_lovely_vargas",
+      "breakpoints": true
     }
   ]
 }

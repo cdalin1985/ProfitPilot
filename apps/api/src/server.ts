@@ -9,6 +9,8 @@ import { assertCan, AuthorizationError } from "@profit-pilot/authz";
 import {
   awinConnectionTestResponseSchema,
   awinFeedImportResponseSchema,
+  contentDraftResponseSchema,
+  createContentDraftSchema,
   createOrganizationWorkspaceSchema,
   identifierSchema,
   importAwinFeedSchema,
@@ -21,6 +23,9 @@ import {
   FeedSyncFreshnessError,
   FeedSyncInProgressError,
   FeedSyncQuotaError,
+  ContentGenerationIdempotencyConflictError,
+  ContentGenerationInProgressError,
+  OpportunityUnavailableError,
 } from "@profit-pilot/db";
 import { developmentContentReview, developmentOverview } from "@profit-pilot/fixtures";
 
@@ -33,6 +38,12 @@ import {
   type ApplicationServices,
 } from "./application-services.js";
 import type { ApiConfig } from "./config.js";
+import {
+  ContentGenerationConfigurationError,
+  ContentGenerationUnavailableError,
+  createConfiguredContentGenerationService,
+  type ContentGenerationService,
+} from "./content-generation.js";
 import {
   AwinAuthenticationError,
   AwinFeedNotFoundError,
@@ -47,7 +58,11 @@ import {
   createProductIngestionService,
   type ProductIngestionService,
 } from "./product-ingestion.js";
-import { createAwinCredentialResolver, SecretResolutionError } from "./secrets.js";
+import {
+  createAwinCredentialResolver,
+  createOpenAICredentialResolver,
+  SecretResolutionError,
+} from "./secrets.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -56,6 +71,7 @@ export interface ServerDependencies {
   readinessProbe?: () => Promise<void>;
   awinClient?: AwinClient;
   productIngestionService?: ProductIngestionService;
+  contentGenerationService?: ContentGenerationService;
 }
 
 export async function buildServer({
@@ -68,6 +84,10 @@ export async function buildServer({
     awinClient,
     credentialResolver: createAwinCredentialResolver(config),
   }),
+  contentGenerationService = createConfiguredContentGenerationService(
+    config,
+    createOpenAICredentialResolver(config),
+  ),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -82,6 +102,7 @@ export async function buildServer({
           "*.secret",
           "*.token",
           "*.accessToken",
+          "*.apiKey",
         ],
         censor: "[REDACTED]",
       },
@@ -217,6 +238,55 @@ export async function buildServer({
       return reply.status(503).type("application/problem+json").send({
         type: "https://profitpilot.app/problems/secret-resolution-failed",
         title: "Awin credential is unavailable",
+        status: 503,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof ContentGenerationIdempotencyConflictError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/content-idempotency-conflict",
+        title: "Content generation idempotency conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof ContentGenerationInProgressError) {
+      const retryAfter = Math.max(1, Math.ceil((error.retryAt.getTime() - Date.now()) / 1_000));
+      return reply
+        .header("retry-after", String(retryAfter))
+        .status(409)
+        .type("application/problem+json")
+        .send({
+          type: "https://profitpilot.app/problems/content-generation-in-progress",
+          title: "Content generation is in progress",
+          status: 409,
+          detail: error.message,
+          requestId: request.id,
+        });
+    }
+
+    if (error instanceof OpportunityUnavailableError) {
+      return reply.status(404).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/opportunity-unavailable",
+        title: "Opportunity unavailable",
+        status: 404,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (
+      error instanceof ContentGenerationConfigurationError ||
+      error instanceof ContentGenerationUnavailableError
+    ) {
+      request.log.error({ err: error }, "grounded content generation unavailable");
+      return reply.status(503).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/content-generation-unavailable",
+        title: "Grounded content generation is unavailable",
         status: 503,
         detail: error.message,
         requestId: request.id,
@@ -434,6 +504,36 @@ export async function buildServer({
       return awinFeedImportResponseSchema.parse(
         await productIngestionService.importAwinFeed(context, input),
       );
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/content/drafts",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 hour",
+        },
+      },
+    },
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "content:edit");
+      const idempotencyHeader = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
+      );
+      const input = createContentDraftSchema.parse(request.body);
+      const result = contentDraftResponseSchema.parse(
+        await contentGenerationService.createDraft(context, input, idempotencyKey),
+      );
+      return reply
+        .status(result.replayed ? 200 : 201)
+        .header("location", `/v1/content/${result.contentId}`)
+        .send(result);
     },
   );
 

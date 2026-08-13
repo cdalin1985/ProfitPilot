@@ -9,5 +9,6 @@ export {
 } from "./database.js";
 export * from "./onboarding.js";
 export * from "./catalog.js";
+export * from "./content-generation.js";
 export * from "./tenancy.js";
 export * as schema from "./schema.js";

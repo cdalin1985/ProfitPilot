@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createContentDraftSchema,
   createOrganizationWorkspaceSchema,
   importAwinFeedSchema,
   opportunitySchema,
@@ -139,5 +140,21 @@ describe("public contracts", () => {
         locale: "english_US",
       }),
     ).toThrow();
+  });
+
+  it("validates a bounded content brief and canonical locale", () => {
+    expect(
+      createContentDraftSchema.parse({
+        opportunityId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        title: "Best insulated mugs for commuters",
+        contentType: "article",
+        locale: "en-us",
+        brief: {
+          audience: "Daily rail commuters",
+          angle: "Compare only evidence-backed practical features",
+          tone: "practical",
+        },
+      }),
+    ).toMatchObject({ locale: "en-US", contentType: "article" });
   });
 });

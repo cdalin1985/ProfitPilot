@@ -56,6 +56,8 @@ pnpm test
 pnpm build
 ```
 
+Before enabling grounded content generation in staging, run the [versioned golden and adversarial evaluation](docs/operations/GROUNDED_CONTENT_EVALUATION.md) against the configured model.
+
 ## Production configuration
 
 Production configuration is supplied through the deployment platform and AWS Secrets Manager. Required values are validated during application startup:
@@ -74,6 +76,8 @@ Production configuration is supplied through the deployment platform and AWS Sec
 - `DATABASE_URL`
 - `ALLOWED_ORIGINS`
 - `AWS_REGION`
+- `OPENAI_API_KEY_SECRET_REFERENCE`
+- `OPENAI_GENERATION_MODEL` (defaults to `gpt-5.6`)
 
 Provider credentials are referenced by secret ARN or secret identifier. They are never stored in this repository, Terraform state outputs, application logs, or browser-accessible environment variables.
 
@@ -85,7 +89,9 @@ PP-101 organization onboarding is implemented with WorkOS AuthKit, verified-user
 
 The Awin boundary now includes read-only token verification, server-side Secrets Manager credential resolution, enhanced JSONL feed ingestion, durable quota/freshness leases, normalization, and deterministic opportunity scoring. Live staging verification requires an approved Awin publisher account, an active tenant connection record, and its real secret reference; follow the [Awin staging verification runbook](docs/operations/AWIN_STAGING_VERIFICATION.md).
 
-Production overview/content repositories, grounded generation, WordPress publication, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
+Grounded content generation now uses non-stored OpenAI Responses with schema-constrained output, server-side API-key resolution, an immutable source snapshot, claim-level evidence records, deterministic mandatory validators, idempotent leases, and audit events. A versioned golden/adversarial harness is included; its live run against the staging model remains required before activation.
+
+Production overview/content reads, editorial approval, WordPress publication, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
 ## Delivery rules
 
