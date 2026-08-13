@@ -321,17 +321,15 @@ export async function requestWorkspaceActivation(
       })
       .returning();
     if (!created) throw new WorkspaceActivationError();
-    await transaction
-      .insert(auditEvents)
-      .values({
-        organizationId: context.organizationId,
-        workspaceId: context.workspaceId,
-        actorUserId: context.userId,
-        action: "workspace.activation_requested",
-        targetType: "workspace",
-        targetId: context.workspaceId,
-        details: { activationRequestId: created.id, readiness },
-      });
+    await transaction.insert(auditEvents).values({
+      organizationId: context.organizationId,
+      workspaceId: context.workspaceId,
+      actorUserId: context.userId,
+      action: "workspace.activation_requested",
+      targetType: "workspace",
+      targetId: context.workspaceId,
+      details: { activationRequestId: created.id, readiness },
+    });
     return activationView(created);
   });
 }
@@ -398,16 +396,14 @@ export async function operatorActivateWorkspace(
           eq(workspaceOnboardingSteps.step, "workspace_activation"),
         ),
       );
-    await transaction
-      .insert(auditEvents)
-      .values({
-        organizationId: request.organizationId,
-        workspaceId: request.workspaceId,
-        action: "workspace.activated",
-        targetType: "workspace",
-        targetId: request.workspaceId,
-        details: { activationRequestId: requestId, operatorId },
-      });
+    await transaction.insert(auditEvents).values({
+      organizationId: request.organizationId,
+      workspaceId: request.workspaceId,
+      action: "workspace.activated",
+      targetType: "workspace",
+      targetId: request.workspaceId,
+      details: { activationRequestId: requestId, operatorId },
+    });
     return activationView(updated);
   });
 }
