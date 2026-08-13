@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createAwinCredentialResolver,
   createOpenAICredentialResolver,
+  createWordPressCredentialResolver,
   SecretResolutionError,
 } from "./secrets.js";
 
@@ -49,5 +50,26 @@ describe("Awin credential resolver", () => {
     await expect(resolver.resolveApiKey("profit-pilot/test/openai")).resolves.toBe(
       "sk-test-0123456789abcdefghij",
     );
+  });
+
+  it("loads structured WordPress credentials without returning the secret payload", async () => {
+    const resolver = createWordPressCredentialResolver(
+      { AWS_REGION: "us-east-1" },
+      {
+        async send() {
+          return {
+            SecretString: JSON.stringify({
+              username: "publisher",
+              applicationPassword: "abcd efgh ijkl mnop qrst uvwx",
+            }),
+          };
+        },
+      },
+    );
+
+    await expect(resolver.resolveCredentials("profit-pilot/test/wordpress")).resolves.toEqual({
+      username: "publisher",
+      applicationPassword: "abcd efgh ijkl mnop qrst uvwx",
+    });
   });
 });

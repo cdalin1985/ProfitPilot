@@ -91,7 +91,9 @@ The Awin boundary now includes read-only token verification, server-side Secrets
 
 Grounded content generation now uses non-stored OpenAI Responses with schema-constrained output, server-side API-key resolution, an immutable source snapshot, claim-level evidence records, deterministic mandatory validators, idempotent leases, and audit events. A versioned golden/adversarial harness is included; its live run against the staging model remains required before activation.
 
-Production overview/content reads, editorial approval, WordPress publication, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
+Editorial approval and WordPress draft publication now use tenant-scoped persistence, server-side Application Password resolution, public-HTTPS target pinning, deterministic draft reuse, and resumable publication leases. A real staging destination must still pass the [WordPress staging verification runbook](docs/operations/WORDPRESS_STAGING_VERIFICATION.md) before activation.
+
+Production overview reads, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
 ## Delivery rules
 

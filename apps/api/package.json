@@ -24,6 +24,7 @@
     "@profit-pilot/db": "workspace:*",
     "@profit-pilot/fixtures": "workspace:*",
     "@workos-inc/node": "10.8.0",
+    "escape-html": "1.0.3",
     "fastify": "5.10.0",
     "jose": "6.1.2",
     "openai": "7.1.0",

@@ -642,6 +642,39 @@ export const contentReviewActions = pgTable(
   ],
 );
 
+export const publishingDestinations = pgTable(
+  "publishing_destinations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: destinationType("type").notNull(),
+    baseUrl: text("base_url").notNull(),
+    secretReference: text("secret_reference").notNull(),
+    status: connectionStatus("status").notNull().default("pending"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("publishing_destinations_tenant_url_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.type,
+      table.baseUrl,
+    ),
+    index("publishing_destinations_tenant_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.status,
+    ),
+  ],
+);
+
 export const publications = pgTable(
   "publications",
   {
@@ -659,12 +692,23 @@ export const publications = pgTable(
     destinationId: text("destination_id"),
     canonicalUrl: text("canonical_url"),
     idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull().default(""),
     status: publicationStatus("status").notNull(),
+    remotePostId: text("remote_post_id"),
+    remoteSlug: text("remote_slug"),
+    remoteStatus: text("remote_status"),
+    leaseToken: text("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("publications_idempotency_unique").on(table.organizationId, table.idempotencyKey),
+    uniqueIndex("publications_idempotency_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
     index("publications_tenant_status_idx").on(
       table.organizationId,
       table.workspaceId,

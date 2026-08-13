@@ -6,6 +6,8 @@ import {
   importAwinFeedSchema,
   opportunitySchema,
   problemDetailsSchema,
+  configureWordPressDestinationSchema,
+  createWordPressDraftSchema,
   tenantContextSchema,
 } from "./index.js";
 
@@ -156,5 +158,25 @@ describe("public contracts", () => {
         },
       }),
     ).toMatchObject({ locale: "en-US", contentType: "article" });
+  });
+
+  it("accepts secret references for WordPress drafts while rejecting raw or malformed inputs", () => {
+    expect(
+      configureWordPressDestinationSchema.parse({
+        name: "Northstar WordPress",
+        siteUrl: "https://publisher.example.com",
+        secretReference: "profit-pilot/test/wordpress",
+      }),
+    ).toMatchObject({ secretReference: "profit-pilot/test/wordpress" });
+    expect(() =>
+      configureWordPressDestinationSchema.parse({
+        name: "Northstar WordPress",
+        siteUrl: "https://publisher.example.com",
+        secretReference: "invalid\nreference",
+      }),
+    ).toThrow();
+    expect(() =>
+      createWordPressDraftSchema.parse({ destinationId: "not-a-uuid", revisionId: "also-not" }),
+    ).toThrow();
   });
 });

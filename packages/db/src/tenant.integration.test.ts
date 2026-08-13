@@ -7,6 +7,11 @@ import {
   replayCompletedOnboarding,
   reserveOnboarding,
 } from "./onboarding.js";
+import {
+  completeWordPressPublication,
+  failWordPressPublication,
+  reserveWordPressPublication,
+} from "./publication.js";
 import { closeDatabase } from "./database.js";
 
 const adminUrl = process.env.DATABASE_ADMIN_URL;
@@ -30,6 +35,8 @@ const contentRevisionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c141";
 const contentRevisionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c142";
 const reviewActionA = "018f6d4d-74d4-7c18-a1d4-bb620a63c151";
 const reviewActionB = "018f6d4d-74d4-7c18-a1d4-bb620a63c152";
+const destinationA = "018f6d4d-74d4-7c18-a1d4-bb620a63c161";
+const publicationRequestA = "018f6d4d-74d4-7c18-a1d4-bb620a63c162";
 const userA = "018f6d4d-74d4-7c18-a1d4-bb620a63c301";
 const userB = "018f6d4d-74d4-7c18-a1d4-bb620a63c302";
 const actorA = "user_integration_a";
@@ -470,6 +477,67 @@ describe.skipIf(!integrationAvailable)("PostgreSQL tenant isolation", () => {
 
     expect(visibleToActorA).toEqual([{ count: "1" }]);
     expect(visibleToActorB).toEqual([{ count: "0" }]);
+  });
+
+  it("leases, fails, retries, completes, and replays a tenant-scoped WordPress draft", async () => {
+    if (!admin || !application) return;
+    await admin`
+      insert into publishing_destinations (
+        id, organization_id, workspace_id, name, type, base_url,
+        secret_reference, status, verified_at
+      )
+      values (
+        ${destinationA}, ${organizationA}, ${workspaceA}, 'Tenant A WordPress', 'wordpress',
+        'https://publisher.example.com', 'test/tenant-a-wordpress', 'active', now()
+      )
+      on conflict (id) do nothing
+    `;
+    await admin`update content_items set status = 'approved' where id = ${contentItemA}`;
+    const context = {
+      organizationId: organizationA,
+      workspaceId: workspaceA,
+      userId: userA,
+      organizationRole: "owner" as const,
+      workspaceRole: "workspace_admin" as const,
+    };
+    const request = {
+      contentId: contentItemA,
+      revisionId: contentRevisionA,
+      destinationId: destinationA,
+    };
+
+    const first = await reserveWordPressPublication(context, request, publicationRequestA);
+    expect(first.replayed).toBe(false);
+    if (first.replayed) return;
+    await failWordPressPublication(context, first, "simulated_timeout");
+
+    const retry = await reserveWordPressPublication(context, request, publicationRequestA);
+    expect(retry.replayed).toBe(false);
+    if (retry.replayed) return;
+    expect(retry.leaseToken).not.toBe(first.leaseToken);
+    const completed = await completeWordPressPublication(context, retry, {
+      id: "92",
+      slug: retry.remoteSlug,
+      url: "https://publisher.example.com/?p=92",
+    });
+    expect(completed).toMatchObject({ status: "draft_created", replayed: false });
+
+    const replay = await reserveWordPressPublication(context, request, publicationRequestA);
+    expect(replay).toMatchObject({
+      replayed: true,
+      publication: { status: "draft_created", remotePostId: "92", replayed: true },
+    });
+
+    const tenantBVisibility = await application.begin(async (transaction) => {
+      await transaction`select set_config('app.current_organization_id', ${organizationB}, true)`;
+      await transaction`select set_config('app.current_workspace_id', ${workspaceB}, true)`;
+      return transaction<{ count: string }[]>`
+        select count(*)::text AS count
+        from publishing_destinations
+        where id = ${destinationA}
+      `;
+    });
+    expect(tenantBVisibility).toEqual([{ count: "0" }]);
   });
 
   it("serializes concurrent onboarding completion and replays through forced RLS", async () => {
