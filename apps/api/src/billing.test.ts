@@ -90,6 +90,7 @@ describe("billing service", () => {
     );
     const timestamp = Math.floor(Date.now() / 1_000);
     const secret = "whsec_0123456789";
+    // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key -- deterministic test-only key
     const signature = createHmac("sha256", secret)
       .update(`${timestamp}.${payload.toString("utf8")}`)
       .digest("hex");

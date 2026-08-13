@@ -10,6 +10,7 @@ describe("Stripe webhook signatures", () => {
     const secret = "whsec_test0123456789";
     const now = new Date("2026-08-13T12:00:00.000Z");
     const timestamp = Math.floor(now.getTime() / 1_000);
+    // nosemgrep: javascript.lang.security.audit.hardcoded-hmac-key.hardcoded-hmac-key -- deterministic test-only key
     const signature = createHmac("sha256", secret)
       .update(`${timestamp}.${payload.toString("utf8")}`)
       .digest("hex");
