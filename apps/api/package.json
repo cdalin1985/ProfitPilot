@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/main.ts",
+    "evaluate:grounded-content": "tsx scripts/evaluate-grounded-content.ts",
     "lint": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "start": "node dist/main.js",
     "test": "vitest run src",

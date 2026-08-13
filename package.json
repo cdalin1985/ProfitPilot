@@ -18,6 +18,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
+    "verify:staging:grounded-content": "pnpm --filter @profit-pilot/api evaluate:grounded-content",
     "verify:staging:awin": "pnpm --filter @profit-pilot/api verify:staging:awin-contract && pnpm --filter @profit-pilot/db verify:staging:awin"
   },
   "devDependencies": {
