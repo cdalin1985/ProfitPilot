@@ -75,5 +75,3 @@ ALTER TABLE "organization_entitlements" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "organization_entitlements_organization_access" ON "organization_entitlements" FOR ALL
   USING ("organization_id" = app_private.current_organization_id())
   WITH CHECK ("organization_id" = app_private.current_organization_id());
-
-REVOKE UPDATE, DELETE ON "billing_webhook_events" FROM profit_pilot_app;
