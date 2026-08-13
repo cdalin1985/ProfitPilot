@@ -472,3 +472,44 @@ export type ConfigureWordPressDestination = z.infer<typeof configureWordPressDes
 export type WordPressDestination = z.infer<typeof wordpressDestinationSchema>;
 export type CreateWordPressDraft = z.infer<typeof createWordPressDraftSchema>;
 export type WordPressDraftPublication = z.infer<typeof wordpressDraftPublicationSchema>;
+
+export const createAffiliateLinkSchema = z.object({
+  revisionId: identifierSchema,
+  expiresInDays: z.number().int().min(1).max(400).default(180),
+});
+
+export const affiliateLinkSchema = z.object({
+  linkId: identifierSchema,
+  contentId: identifierSchema,
+  revisionId: identifierSchema,
+  productId: identifierSchema,
+  redirectUrl: z.string().url(),
+  expiresAt: z.string().datetime(),
+  revokedAt: z.string().datetime().nullable(),
+  replayed: z.boolean(),
+});
+
+export const clickEventEnvelopeSchema = z.object({
+  eventId: identifierSchema,
+  linkId: identifierSchema,
+  organizationId: identifierSchema,
+  workspaceId: identifierSchema,
+  occurredAt: z.string().datetime(),
+  method: z.enum(["GET", "HEAD"]),
+  visitorHash: z.string().regex(/^[a-f0-9]{64}$/),
+  privacyKeyId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
+  userAgentClass: z.string().trim().min(1).max(64),
+  botReason: z.string().trim().min(1).max(64).nullable(),
+});
+
+export const clickEventResultSchema = z.object({
+  eventId: identifierSchema,
+  classification: z.enum(["qualified", "bot", "duplicate"]),
+  reasonCode: z.string().min(1).max(64),
+  replayed: z.boolean(),
+});
+
+export type CreateAffiliateLink = z.infer<typeof createAffiliateLinkSchema>;
+export type AffiliateLink = z.infer<typeof affiliateLinkSchema>;
+export type ClickEventEnvelope = z.infer<typeof clickEventEnvelopeSchema>;
+export type ClickEventResult = z.infer<typeof clickEventResultSchema>;

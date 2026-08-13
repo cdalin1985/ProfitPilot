@@ -78,6 +78,10 @@ Production configuration is supplied through the deployment platform and AWS Sec
 - `AWS_REGION`
 - `OPENAI_API_KEY_SECRET_REFERENCE`
 - `OPENAI_GENERATION_MODEL` (defaults to `gpt-5.6`)
+- `PUBLIC_REDIRECT_BASE_URL`
+- `CLICK_SIGNING_KEY_ID` and `CLICK_SIGNING_KEY`
+- `CLICK_PRIVACY_HASH_KEY` and `CLICK_PRIVACY_KEY_ID`
+- `CLICK_EVENT_AUTH_KEY` and `CLICK_INGESTION_URL`
 
 Provider credentials are referenced by secret ARN or secret identifier. They are never stored in this repository, Terraform state outputs, application logs, or browser-accessible environment variables.
 
@@ -93,7 +97,9 @@ Grounded content generation now uses non-stored OpenAI Responses with schema-con
 
 Editorial approval and WordPress draft publication now use tenant-scoped persistence, server-side Application Password resolution, public-HTTPS target pinning, deterministic draft reuse, and resumable publication leases. A real staging destination must still pass the [WordPress staging verification runbook](docs/operations/WORDPRESS_STAGING_VERIFICATION.md) before activation.
 
-Production overview reads, click attribution, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
+Signed immutable affiliate redirects and qualified-click ingestion now run behind separate public redirect and internal ingestion boundaries. They include expiring HMAC tokens, tenant-scoped destination lookup, revocation, append-only minimized events, bot/prefetch filtering, and concurrency-safe duplicate suppression. Staging activation remains gated by the [signed-click verification runbook](docs/operations/CLICK_STAGING_VERIFICATION.md).
+
+Production overview reads, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
 ## Delivery rules
 

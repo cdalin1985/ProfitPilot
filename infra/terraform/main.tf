@@ -356,3 +356,15 @@ resource "aws_cloudwatch_log_group" "api" {
   retention_in_days = var.log_retention_days
   kms_key_id        = aws_kms_key.application.arn
 }
+
+resource "aws_cloudwatch_log_group" "redirect" {
+  name              = "/${local.name}/redirect"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = aws_kms_key.application.arn
+}
+
+resource "aws_cloudwatch_log_group" "event_ingestion" {
+  name              = "/${local.name}/event-ingestion"
+  retention_in_days = var.log_retention_days
+  kms_key_id        = aws_kms_key.application.arn
+}

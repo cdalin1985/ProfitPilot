@@ -12,6 +12,7 @@ import { buildServer } from "./server.js";
 import type { AwinClient } from "./awin.js";
 import type { ProductIngestionService } from "./product-ingestion.js";
 import type { PublicationService } from "./publication.js";
+import type { ClickAttributionService } from "./click-attribution.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -46,6 +47,35 @@ function testServices(overrides: Partial<ApplicationServices> = {}): Application
 }
 
 describe("API server", () => {
+  it("creates a tenant-authorized signed affiliate link", async () => {
+    const createLink = vi.fn(async () => ({
+      linkId: "018f6d4d-74d4-7c18-a1d4-bb620a63c001",
+      contentId: "018f6d4d-74d4-7c18-a1d4-bb620a63c002",
+      revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63c003",
+      productId: "018f6d4d-74d4-7c18-a1d4-bb620a63c004",
+      redirectUrl: "https://go.example.com/r/signed-token",
+      expiresAt: "2027-02-09T00:00:00.000Z",
+      revokedAt: null,
+      replayed: false,
+    }));
+    const clickAttributionService: ClickAttributionService = { createLink, async revokeLink() {} };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      clickAttributionService,
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/content/018f6d4d-74d4-7c18-a1d4-bb620a63c002/affiliate-links`,
+      headers: { "idempotency-key": "018f6d4d-74d4-7c18-a1d4-bb620a63c005" },
+      payload: { revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63c003", expiresInDays: 180 },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json().redirectUrl).toBe("https://go.example.com/r/signed-token");
+    expect(createLink).toHaveBeenCalled();
+    await server.close();
+  });
   it("reports liveness without authentication", async () => {
     const server = await buildServer({
       config: testConfig(),

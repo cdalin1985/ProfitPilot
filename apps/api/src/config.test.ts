@@ -18,6 +18,7 @@ describe("API configuration", () => {
       AUDIT_IP_HASH_KEY: "a-production-secret-with-32-characters",
       ALLOWED_ORIGINS: "https://app.example.com",
       DATABASE_URL: "postgresql://application:secret@database.example.com:5432/profit_pilot",
+      CLICK_SIGNING_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     });
 
     expect(config.AUTH_MODE).toBe("oidc");
