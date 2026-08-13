@@ -10,6 +10,8 @@
 6. Create or confirm the backup/restore point required by the migration risk class.
 7. For PP-101, prove tenant tables are empty or attach the approved WorkOS identity-linking and workspace-profile backfill plan. A `0004` preflight failure blocks promotion.
 8. Verify the WorkOS callback, sign-in, and logout URIs; email verification; MFA policy; owner-role slug; and environment pairing without exposing secret values.
+9. For PP-111, verify the Stripe API version, price allowlist, webhook secret reference, Customer
+   Portal policy, signed-event replay checks, and effective-entitlement denials in staging.
 
 ## Promotion
 

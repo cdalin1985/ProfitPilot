@@ -203,6 +203,65 @@ export const sessionStateSchema = z.discriminatedUnion("status", [
 
 export type SessionState = z.infer<typeof sessionStateSchema>;
 
+export const billingPlanSchema = z.enum(["starter", "growth"]);
+export type BillingPlan = z.infer<typeof billingPlanSchema>;
+
+export const billingSubscriptionStatusSchema = z.enum([
+  "incomplete",
+  "incomplete_expired",
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "unpaid",
+  "paused",
+]);
+export type BillingSubscriptionStatus = z.infer<typeof billingSubscriptionStatusSchema>;
+
+export const entitlementKeySchema = z.enum([
+  "private_beta_access",
+  "awin_import",
+  "content_generation",
+  "wordpress_draft",
+  "click_tracking",
+  "overview_metrics",
+]);
+export type EntitlementKey = z.infer<typeof entitlementKeySchema>;
+
+export const createCheckoutSessionSchema = z.object({
+  plan: billingPlanSchema,
+});
+export type CreateCheckoutSession = z.infer<typeof createCheckoutSessionSchema>;
+
+export const hostedBillingSessionSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .refine((value) => new URL(value).protocol === "https:"),
+});
+export type HostedBillingSession = z.infer<typeof hostedBillingSessionSchema>;
+
+export const effectiveEntitlementSchema = z.object({
+  key: entitlementKeySchema,
+  enabled: z.boolean(),
+  limit: z.number().int().positive().nullable(),
+  expiresAt: z.string().datetime().nullable(),
+  sources: z.array(z.enum(["stripe", "manual_beta_grant"])).min(1),
+});
+export type EffectiveEntitlement = z.infer<typeof effectiveEntitlementSchema>;
+
+export const billingContextSchema = z.object({
+  organizationId: identifierSchema,
+  customerId: z.string().min(1).nullable(),
+  subscriptionId: z.string().min(1).nullable(),
+  plan: billingPlanSchema.nullable(),
+  status: billingSubscriptionStatusSchema.nullable(),
+  currentPeriodEnd: z.string().datetime().nullable(),
+  cancelAtPeriodEnd: z.boolean(),
+  entitlements: z.array(effectiveEntitlementSchema),
+});
+export type BillingContext = z.infer<typeof billingContextSchema>;
+
 export const opportunityLevelSchema = z.enum(["high", "medium", "low"]);
 export const freshnessTrendSchema = z.enum(["rising", "new", "steady", "falling"]);
 

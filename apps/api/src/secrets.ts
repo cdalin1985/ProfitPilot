@@ -17,6 +17,18 @@ const wordpressCredentialSchema = z.object({
   username: wordpressUsernameSchema,
   applicationPassword: wordpressApplicationPasswordSchema,
 });
+const stripeCredentialsSchema = z.object({
+  secretKey: z
+    .string()
+    .trim()
+    .regex(/^sk_(?:test|live)_[A-Za-z0-9_]+$/)
+    .max(512),
+  webhookSecret: z
+    .string()
+    .trim()
+    .regex(/^whsec_[A-Za-z0-9]+$/)
+    .max(512),
+});
 
 export interface AwinCredentialResolver {
   resolveAccessToken(secretReference: string): Promise<string>;
@@ -33,6 +45,15 @@ export interface WordPressCredentials {
 
 export interface WordPressCredentialResolver {
   resolveCredentials(secretReference: string): Promise<WordPressCredentials>;
+}
+
+export interface StripeCredentials {
+  secretKey: string;
+  webhookSecret: string;
+}
+
+export interface StripeCredentialResolver {
+  resolveCredentials(secretReference: string): Promise<StripeCredentials>;
 }
 
 export class SecretResolutionError extends Error {
@@ -76,6 +97,14 @@ function parseApiKey(value: string): string {
 function parseWordPressCredentials(value: string): WordPressCredentials {
   try {
     return wordpressCredentialSchema.parse(JSON.parse(value));
+  } catch {
+    throw new SecretResolutionError();
+  }
+}
+
+function parseStripeCredentials(value: string): StripeCredentials {
+  try {
+    return stripeCredentialsSchema.parse(JSON.parse(value));
   } catch {
     throw new SecretResolutionError();
   }
@@ -138,6 +167,18 @@ export function createWordPressCredentialResolver(
   return {
     async resolveCredentials(secretReference) {
       return parseWordPressCredentials(await readSecret(secretReference));
+    },
+  };
+}
+
+export function createStripeCredentialResolver(
+  config: Pick<ApiConfig, "AWS_REGION">,
+  client?: SecretsManagerReader,
+): StripeCredentialResolver {
+  const readSecret = createSecretReader(config, client);
+  return {
+    async resolveCredentials(secretReference) {
+      return parseStripeCredentials(await readSecret(secretReference));
     },
   };
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedActor } from "@profit-pilot/contracts";
+import { EntitlementDeniedError } from "@profit-pilot/db";
 import { developmentContentReview, developmentSession } from "@profit-pilot/fixtures";
 
 import type { ApplicationServices } from "./application-services.js";
@@ -14,6 +15,7 @@ import type { ProductIngestionService } from "./product-ingestion.js";
 import type { PublicationService } from "./publication.js";
 import type { ClickAttributionService } from "./click-attribution.js";
 import type { OverviewService } from "./overview.js";
+import type { BillingService, EntitlementService } from "./billing.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -48,6 +50,79 @@ function testServices(overrides: Partial<ApplicationServices> = {}): Application
 }
 
 describe("API server", () => {
+  it("creates an authorized hosted Checkout session using a server billing service", async () => {
+    const createCheckout = vi.fn(async () => ({ url: "https://checkout.stripe.com/c/pay/test" }));
+    const billingService: BillingService = {
+      createCheckout,
+      async createPortal() {
+        return { url: "https://billing.stripe.com/p/session/test" };
+      },
+      async getContext() {
+        return {
+          organizationId: developmentSession.tenant.organizationId,
+          customerId: null,
+          subscriptionId: null,
+          plan: null,
+          status: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+          entitlements: [],
+        };
+      },
+      async handleWebhook() {
+        return { received: true, replayed: false, applied: false, ignored: true };
+      },
+    };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      billingService,
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/billing/checkout`,
+      headers: { "idempotency-key": "018f6d4d-74d4-7c18-a1d4-bb620a63c099" },
+      payload: { plan: "growth" },
+    });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({ url: "https://checkout.stripe.com/c/pay/test" });
+    expect(createCheckout).toHaveBeenCalledWith(
+      developmentSession.tenant,
+      { plan: "growth" },
+      "018f6d4d-74d4-7c18-a1d4-bb620a63c099",
+    );
+    await server.close();
+  });
+
+  it("enforces entitlements before protected provider work", async () => {
+    const entitlementService: EntitlementService = {
+      async assert(_context, entitlement) {
+        throw new EntitlementDeniedError(entitlement);
+      },
+    };
+    const importAwinFeed = vi.fn();
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      entitlementService,
+      productIngestionService: { importAwinFeed },
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/connections/awin/imports`,
+      payload: {
+        connectionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        publisherId: 1,
+        advertiserId: 2,
+        locale: "en_US",
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(importAwinFeed).not.toHaveBeenCalled();
+    await server.close();
+  });
   it("creates a tenant-authorized signed affiliate link", async () => {
     const createLink = vi.fn(async () => ({
       linkId: "018f6d4d-74d4-7c18-a1d4-bb620a63c001",

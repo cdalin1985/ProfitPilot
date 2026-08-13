@@ -4,6 +4,7 @@ import {
   createAwinCredentialResolver,
   createOpenAICredentialResolver,
   createWordPressCredentialResolver,
+  createStripeCredentialResolver,
   SecretResolutionError,
 } from "./secrets.js";
 
@@ -70,6 +71,26 @@ describe("Awin credential resolver", () => {
     await expect(resolver.resolveCredentials("profit-pilot/test/wordpress")).resolves.toEqual({
       username: "publisher",
       applicationPassword: "abcd efgh ijkl mnop qrst uvwx",
+    });
+  });
+
+  it("loads Stripe server credentials without exposing them to clients", async () => {
+    const resolver = createStripeCredentialResolver(
+      { AWS_REGION: "us-east-1" },
+      {
+        async send() {
+          return {
+            SecretString: JSON.stringify({
+              secretKey: "sk_test_0123456789abcdefghij",
+              webhookSecret: "whsec_0123456789abcdefghij",
+            }),
+          };
+        },
+      },
+    );
+    await expect(resolver.resolveCredentials("profit-pilot/test/stripe")).resolves.toEqual({
+      secretKey: "sk_test_0123456789abcdefghij",
+      webhookSecret: "whsec_0123456789abcdefghij",
     });
   });
 });

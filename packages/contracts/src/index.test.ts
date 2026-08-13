@@ -11,6 +11,8 @@ import {
   createAffiliateLinkSchema,
   clickEventEnvelopeSchema,
   tenantContextSchema,
+  billingContextSchema,
+  createCheckoutSessionSchema,
 } from "./index.js";
 
 describe("public contracts", () => {
@@ -207,5 +209,32 @@ describe("public contracts", () => {
         botReason: null,
       }),
     ).toThrow();
+  });
+
+  it("accepts only server-known billing plans and typed effective entitlements", () => {
+    expect(createCheckoutSessionSchema.parse({ plan: "starter" })).toEqual({ plan: "starter" });
+    expect(() =>
+      createCheckoutSessionSchema.parse({ plan: "price_attacker_controlled" }),
+    ).toThrow();
+    expect(
+      billingContextSchema.parse({
+        organizationId: "018f6d4d-74d4-7c18-a1d4-bb620a63b001",
+        customerId: "cus_test",
+        subscriptionId: "sub_test",
+        plan: "growth",
+        status: "active",
+        currentPeriodEnd: "2026-09-13T00:00:00.000Z",
+        cancelAtPeriodEnd: false,
+        entitlements: [
+          {
+            key: "content_generation",
+            enabled: true,
+            limit: 1000,
+            expiresAt: null,
+            sources: ["stripe"],
+          },
+        ],
+      }).entitlements[0]?.key,
+    ).toBe("content_generation");
   });
 });

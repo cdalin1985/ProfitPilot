@@ -31,6 +31,23 @@ const configSchema = z
       .refine((value) => !/[\r\n\0]/.test(value))
       .optional(),
     OPENAI_GENERATION_MODEL: z.string().trim().min(1).max(120).default("gpt-5.6"),
+    STRIPE_CREDENTIALS_SECRET_REFERENCE: z
+      .string()
+      .min(1)
+      .max(2048)
+      .refine((value) => !/[\r\n\0]/.test(value))
+      .optional(),
+    STRIPE_STARTER_PRICE_ID: z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+    STRIPE_GROWTH_PRICE_ID: z
+      .string()
+      .regex(/^price_[A-Za-z0-9]+$/)
+      .optional(),
+    STRIPE_CHECKOUT_SUCCESS_URL: z.string().url().optional(),
+    STRIPE_CHECKOUT_CANCEL_URL: z.string().url().optional(),
+    STRIPE_PORTAL_RETURN_URL: z.string().url().optional(),
     PUBLIC_REDIRECT_BASE_URL: z.string().url().default("http://localhost:4100"),
     CLICK_SIGNING_KEY_ID: z
       .string()
@@ -85,6 +102,17 @@ const configSchema = z
         path: ["CLICK_SIGNING_KEY"],
         message: "Production requires CLICK_SIGNING_KEY from the deployment secret manager",
       });
+    }
+
+    for (const key of [
+      "STRIPE_CHECKOUT_SUCCESS_URL",
+      "STRIPE_CHECKOUT_CANCEL_URL",
+      "STRIPE_PORTAL_RETURN_URL",
+    ] as const) {
+      const url = value[key];
+      if (value.NODE_ENV === "production" && url && new URL(url).protocol !== "https:") {
+        context.addIssue({ code: "custom", path: [key], message: `${key} must use HTTPS` });
+      }
     }
   });
 
