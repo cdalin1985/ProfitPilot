@@ -27,7 +27,7 @@
 - PP-110: Overview metrics backed by production repositories.
 - PP-111: Stripe Checkout, webhook projection, entitlements, and Customer Portal. Implemented;
   production activation remains gated on Stripe account configuration and staging verification.
-- PP-112: Private-beta onboarding for 5–10 design partners.
+- PP-112: Private-beta admission, authoritative onboarding reconciliation, and operator activation implemented; live onboarding of the initial 5–10 design partners remains an operational gate.
 
 ## General-availability gates
 

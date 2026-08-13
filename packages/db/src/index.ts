@@ -8,6 +8,7 @@ export {
   type DatabaseTransaction,
 } from "./database.js";
 export * from "./onboarding.js";
+export * from "./beta-admission.js";
 export * from "./catalog.js";
 export * from "./content-generation.js";
 export * from "./content-review.js";

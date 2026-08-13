@@ -10,6 +10,8 @@ import {
   createWordPressDraftSchema,
   createAffiliateLinkSchema,
   clickEventEnvelopeSchema,
+  acceptBetaInviteSchema,
+  createBetaInviteSchema,
   tenantContextSchema,
   billingContextSchema,
   createCheckoutSessionSchema,
@@ -236,5 +238,13 @@ describe("public contracts", () => {
         ],
       }).entitlements[0]?.key,
     ).toBe("content_generation");
+  });
+
+  it("normalizes beta invite emails and rejects weak acceptance tokens", () => {
+    expect(createBetaInviteSchema.parse({ email: "Partner@Example.COM" })).toMatchObject({
+      email: "partner@example.com",
+      expiresInDays: 7,
+    });
+    expect(() => acceptBetaInviteSchema.parse({ token: "too-short" })).toThrow();
   });
 });

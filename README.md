@@ -101,6 +101,10 @@ Signed immutable affiliate redirects and qualified-click ingestion now run behin
 
 The production overview is backed by tenant-scoped database reads, including PP-109 qualified-click attribution, content state, publication outcomes, current opportunities, and operational queues. Commission is explicitly unavailable until a durable affiliate-network transaction source exists. Billing and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
+Private-beta admission now binds digest-only, rotating invitations to verified identities and gates organization onboarding in production. Workspace activation reconciles authoritative resources, persists an idempotent readiness request, checks an injected entitlement gate, and requires an audited operator decision. Follow the [private-beta onboarding runbook](docs/operations/PRIVATE_BETA_ONBOARDING.md).
+
+External observability and live partner onboarding remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
+
 ## Delivery rules
 
 - Every request and background job carries organization and workspace context.

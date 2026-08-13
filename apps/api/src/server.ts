@@ -5,7 +5,7 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import Fastify, { type FastifyInstance } from "fastify";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 
 import { assertCan, AuthorizationError } from "@profit-pilot/authz";
 import {
@@ -20,6 +20,11 @@ import {
   createWordPressDraftSchema,
   createAffiliateLinkSchema,
   affiliateLinkSchema,
+  acceptBetaInviteSchema,
+  betaAdmissionSchema,
+  createBetaInviteSchema,
+  issuedBetaInviteSchema,
+  activationRequestSchema,
   createOrganizationWorkspaceSchema,
   identifierSchema,
   importAwinFeedSchema,
@@ -60,6 +65,8 @@ import {
   BillingAccountUnavailableError,
   BillingWebhookConflictError,
   EntitlementDeniedError,
+  BetaInviteError,
+  WorkspaceActivationError,
 } from "@profit-pilot/db";
 
 import {
@@ -99,7 +106,7 @@ import {
   createAwinClient,
   type AwinClient,
 } from "./awin.js";
-import { IdentityProvisioningError } from "./identity-admin.js";
+import { createIdentityAdmin, IdentityProvisioningError } from "./identity-admin.js";
 import { AuthenticationError, createIdentityProvider, type IdentityProvider } from "./identity.js";
 import {
   createProductIngestionService,
@@ -125,6 +132,12 @@ import {
 } from "./click-attribution.js";
 import { createOverviewService, type OverviewService } from "./overview.js";
 import { StripeUnavailableError, StripeWebhookSignatureError } from "./stripe.js";
+import {
+  BetaAdmissionRequiredError,
+  createBetaAdmissionService,
+  type BetaAdmissionService,
+  type EntitlementFeatureGate,
+} from "./beta-admission.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -140,6 +153,8 @@ export interface ServerDependencies {
   overviewService?: OverviewService;
   billingService?: BillingService;
   entitlementService?: EntitlementService;
+  betaAdmissionService?: BetaAdmissionService;
+  entitlementGate?: EntitlementFeatureGate;
 }
 
 export async function buildServer({
@@ -166,6 +181,12 @@ export async function buildServer({
   overviewService = createOverviewService(config),
   billingService = createBillingService(config, createStripeCredentialResolver(config)),
   entitlementService = createEntitlementService(config),
+  entitlementGate,
+  betaAdmissionService = createBetaAdmissionService(
+    config,
+    createIdentityAdmin(config),
+    entitlementGate,
+  ),
 }: ServerDependencies): Promise<FastifyInstance> {
   const stripeWebhookBodies = new WeakMap<object, Buffer>();
   const server = Fastify({
@@ -225,6 +246,34 @@ export async function buildServer({
         type: "https://profitpilot.app/problems/forbidden",
         title: "Insufficient permission",
         status: 403,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof BetaAdmissionRequiredError) {
+      return reply.status(403).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/beta-admission-required",
+        title: "Private-beta admission required",
+        status: 403,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+    if (error instanceof BetaInviteError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/beta-invite-invalid",
+        title: "Beta invitation unavailable",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+    if (error instanceof WorkspaceActivationError) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/workspace-activation-blocked",
+        title: "Workspace activation blocked",
+        status: 409,
         detail: error.message,
         requestId: request.id,
       });
@@ -678,6 +727,51 @@ export async function buildServer({
     return services.getSession(actor, requestedWorkspaceId);
   });
 
+  server.get("/v1/beta/admission", async (request) => {
+    const actor = await identityProvider.authenticate(request);
+    return betaAdmissionSchema.parse(await betaAdmissionService.get(actor));
+  });
+
+  server.post(
+    "/v1/beta/invitations/accept",
+    { config: { rateLimit: { max: 10, timeWindow: "1 hour" } } },
+    async (request) => {
+      const actor = await identityProvider.authenticate(request);
+      const input = acceptBetaInviteSchema.parse(request.body);
+      return betaAdmissionSchema.parse(await betaAdmissionService.accept(actor, input.token));
+    },
+  );
+
+  server.post("/v1/operator/beta/invitations", async (request, reply) => {
+    betaAdmissionService.assertOperator(
+      typeof request.headers["x-beta-operator-key"] === "string"
+        ? request.headers["x-beta-operator-key"]
+        : undefined,
+    );
+    const result = issuedBetaInviteSchema.parse(
+      await betaAdmissionService.issue(createBetaInviteSchema.parse(request.body)),
+    );
+    return reply.status(201).send(result);
+  });
+
+  server.post<{ Params: { inviteId: string } }>(
+    "/v1/operator/beta/invitations/:inviteId/rotate",
+    async (request) => {
+      betaAdmissionService.assertOperator(
+        typeof request.headers["x-beta-operator-key"] === "string"
+          ? request.headers["x-beta-operator-key"]
+          : undefined,
+      );
+      const inviteId = identifierSchema.parse(request.params.inviteId);
+      const input = z
+        .object({ expiresInDays: z.number().int().min(1).max(30).default(7) })
+        .parse(request.body);
+      return issuedBetaInviteSchema.parse(
+        await betaAdmissionService.rotate(inviteId, input.expiresInDays),
+      );
+    },
+  );
+
   server.post(
     "/v1/billing/webhooks/stripe",
     {
@@ -766,6 +860,7 @@ export async function buildServer({
     },
     async (request, reply) => {
       const actor = await identityProvider.authenticate(request);
+      await betaAdmissionService.assertAdmitted(actor);
       const idempotencyHeader = request.headers["idempotency-key"];
       const idempotencyKey = identifierSchema.parse(
         typeof idempotencyHeader === "string" ? idempotencyHeader : undefined,
@@ -1049,6 +1144,42 @@ export async function buildServer({
         .status(result.replayed ? 200 : 201)
         .header("location", `/v1/publications/${result.publicationId}`)
         .send(result);
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/activation-requests",
+    async (request, reply) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "workspace:manage");
+      const header = request.headers["idempotency-key"];
+      const idempotencyKey = identifierSchema.parse(
+        typeof header === "string" ? header : undefined,
+      );
+      const result = activationRequestSchema.parse(
+        await betaAdmissionService.requestActivation(context, idempotencyKey),
+      );
+      return reply.status(result.status === "requested" ? 201 : 200).send(result);
+    },
+  );
+
+  server.post<{ Params: { requestId: string } }>(
+    "/v1/operator/activation-requests/:requestId/activate",
+    async (request) => {
+      const key =
+        typeof request.headers["x-beta-operator-key"] === "string"
+          ? request.headers["x-beta-operator-key"]
+          : undefined;
+      betaAdmissionService.assertOperator(key);
+      const operatorId = z.string().trim().min(3).max(120).parse(request.headers["x-operator-id"]);
+      return activationRequestSchema.parse(
+        await betaAdmissionService.activate(
+          identifierSchema.parse(request.params.requestId),
+          operatorId,
+        ),
+      );
     },
   );
 
