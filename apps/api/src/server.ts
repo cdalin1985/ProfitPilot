@@ -406,30 +406,24 @@ export async function buildServer({
     }
 
     if (error instanceof AffiliateLinkNotFoundError) {
-      return reply
-        .status(404)
-        .type("application/problem+json")
-        .send({
-          type: "https://profitpilot.app/problems/affiliate-link-not-found",
-          title: "Affiliate link not found",
-          status: 404,
-          requestId: request.id,
-        });
+      return reply.status(404).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/affiliate-link-not-found",
+        title: "Affiliate link not found",
+        status: 404,
+        requestId: request.id,
+      });
     }
     if (
       error instanceof AffiliateLinkStateError ||
       error instanceof AffiliateLinkIdempotencyConflictError
     ) {
-      return reply
-        .status(409)
-        .type("application/problem+json")
-        .send({
-          type: "https://profitpilot.app/problems/affiliate-link-conflict",
-          title: "Affiliate link conflict",
-          status: 409,
-          detail: error.message,
-          requestId: request.id,
-        });
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/affiliate-link-conflict",
+        title: "Affiliate link conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
     }
 
     if (
