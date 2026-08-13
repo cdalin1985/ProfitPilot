@@ -102,7 +102,10 @@ import {
   WordPressDraftConflictError,
   WordPressUnavailableError,
 } from "./wordpress.js";
-import { createClickAttributionService, type ClickAttributionService } from "./click-attribution.js";
+import {
+  createClickAttributionService,
+  type ClickAttributionService,
+} from "./click-attribution.js";
 
 export interface ServerDependencies {
   config: ApiConfig;
@@ -400,10 +403,24 @@ export async function buildServer({
     }
 
     if (error instanceof AffiliateLinkNotFoundError) {
-      return reply.status(404).type("application/problem+json").send({ type: "https://profitpilot.app/problems/affiliate-link-not-found", title: "Affiliate link not found", status: 404, requestId: request.id });
+      return reply.status(404).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/affiliate-link-not-found",
+        title: "Affiliate link not found",
+        status: 404,
+        requestId: request.id,
+      });
     }
-    if (error instanceof AffiliateLinkStateError || error instanceof AffiliateLinkIdempotencyConflictError) {
-      return reply.status(409).type("application/problem+json").send({ type: "https://profitpilot.app/problems/affiliate-link-conflict", title: "Affiliate link conflict", status: 409, detail: error.message, requestId: request.id });
+    if (
+      error instanceof AffiliateLinkStateError ||
+      error instanceof AffiliateLinkIdempotencyConflictError
+    ) {
+      return reply.status(409).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/affiliate-link-conflict",
+        title: "Affiliate link conflict",
+        status: 409,
+        detail: error.message,
+        requestId: request.id,
+      });
     }
 
     if (
@@ -792,9 +809,21 @@ export async function buildServer({
       const context = await services.resolveTenant(actor, workspaceId);
       assertCan(context, "content:publish");
       const header = request.headers["idempotency-key"];
-      const idempotencyKey = identifierSchema.parse(typeof header === "string" ? header : undefined);
-      const result = affiliateLinkSchema.parse(await clickAttributionService.createLink(context, contentId, createAffiliateLinkSchema.parse(request.body), idempotencyKey));
-      return reply.status(result.replayed ? 200 : 201).header("location", `/v1/affiliate-links/${result.linkId}`).send(result);
+      const idempotencyKey = identifierSchema.parse(
+        typeof header === "string" ? header : undefined,
+      );
+      const result = affiliateLinkSchema.parse(
+        await clickAttributionService.createLink(
+          context,
+          contentId,
+          createAffiliateLinkSchema.parse(request.body),
+          idempotencyKey,
+        ),
+      );
+      return reply
+        .status(result.replayed ? 200 : 201)
+        .header("location", `/v1/affiliate-links/${result.linkId}`)
+        .send(result);
     },
   );
 

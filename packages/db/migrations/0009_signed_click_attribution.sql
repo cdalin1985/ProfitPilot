@@ -49,6 +49,3 @@ CREATE POLICY "click_events_tenant_read" ON "click_events" FOR SELECT
   USING ("organization_id" = app_private.current_organization_id() AND "workspace_id" = app_private.current_workspace_id());
 CREATE POLICY "click_events_tenant_insert" ON "click_events" FOR INSERT
   WITH CHECK ("organization_id" = app_private.current_organization_id() AND "workspace_id" = app_private.current_workspace_id());
-REVOKE UPDATE ON "affiliate_links" FROM profit_pilot_app;
-GRANT UPDATE ("revoked_at", "updated_at") ON "affiliate_links" TO profit_pilot_app;
-REVOKE UPDATE, DELETE ON "click_events" FROM profit_pilot_app;

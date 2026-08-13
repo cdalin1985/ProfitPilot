@@ -59,8 +59,18 @@ describe("API server", () => {
       replayed: false,
     }));
     const clickAttributionService: ClickAttributionService = { createLink, async revokeLink() {} };
-    const server = await buildServer({ config: testConfig(), identityProvider: testIdentityProvider, services: testServices(), clickAttributionService });
-    const response = await server.inject({ method: "POST", url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/content/018f6d4d-74d4-7c18-a1d4-bb620a63c002/affiliate-links`, headers: { "idempotency-key": "018f6d4d-74d4-7c18-a1d4-bb620a63c005" }, payload: { revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63c003", expiresInDays: 180 } });
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      clickAttributionService,
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/content/018f6d4d-74d4-7c18-a1d4-bb620a63c002/affiliate-links`,
+      headers: { "idempotency-key": "018f6d4d-74d4-7c18-a1d4-bb620a63c005" },
+      payload: { revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63c003", expiresInDays: 180 },
+    });
     expect(response.statusCode).toBe(201);
     expect(response.json().redirectUrl).toBe("https://go.example.com/r/signed-token");
     expect(createLink).toHaveBeenCalled();

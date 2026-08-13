@@ -727,11 +727,21 @@ export const affiliateLinks = pgTable(
   "affiliate_links",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
-    contentRevisionId: uuid("content_revision_id").notNull().references(() => contentRevisions.id, { onDelete: "restrict" }),
-    productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
-    publicationId: uuid("publication_id").references(() => publications.id, { onDelete: "set null" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    contentRevisionId: uuid("content_revision_id")
+      .notNull()
+      .references(() => contentRevisions.id, { onDelete: "restrict" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "restrict" }),
+    publicationId: uuid("publication_id").references(() => publications.id, {
+      onDelete: "set null",
+    }),
     destinationUrl: text("destination_url").notNull(),
     destinationUrlHash: text("destination_url_hash").notNull(),
     destinationHost: text("destination_host").notNull(),
@@ -743,9 +753,17 @@ export const affiliateLinks = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("affiliate_links_idempotency_unique").on(table.organizationId, table.workspaceId, table.idempotencyKey),
+    uniqueIndex("affiliate_links_idempotency_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
     index("affiliate_links_revision_product_idx").on(table.contentRevisionId, table.productId),
-    index("affiliate_links_tenant_expiry_idx").on(table.organizationId, table.workspaceId, table.expiresAt),
+    index("affiliate_links_tenant_expiry_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.expiresAt,
+    ),
     check("affiliate_links_https_check", sql`${table.destinationUrl} like 'https://%'`),
   ],
 );
@@ -754,9 +772,15 @@ export const clickEvents = pgTable(
   "click_events",
   {
     id: uuid("id").primaryKey(),
-    organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
-    workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
-    affiliateLinkId: uuid("affiliate_link_id").notNull().references(() => affiliateLinks.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    affiliateLinkId: uuid("affiliate_link_id")
+      .notNull()
+      .references(() => affiliateLinks.id, { onDelete: "cascade" }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
     visitorHash: text("visitor_hash").notNull(),
@@ -767,8 +791,16 @@ export const clickEvents = pgTable(
     requestFingerprint: text("request_fingerprint").notNull(),
   },
   (table) => [
-    index("click_events_tenant_time_idx").on(table.organizationId, table.workspaceId, table.receivedAt),
-    index("click_events_link_visitor_time_idx").on(table.affiliateLinkId, table.visitorHash, table.receivedAt),
+    index("click_events_tenant_time_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.receivedAt,
+    ),
+    index("click_events_link_visitor_time_idx").on(
+      table.affiliateLinkId,
+      table.visitorHash,
+      table.receivedAt,
+    ),
     check("click_events_visitor_hash_check", sql`${table.visitorHash} ~ '^[a-f0-9]{64}$'`),
   ],
 );

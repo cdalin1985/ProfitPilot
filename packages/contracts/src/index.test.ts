@@ -183,8 +183,29 @@ describe("public contracts", () => {
   });
 
   it("bounds signed-link lifetime and minimized click envelopes", () => {
-    expect(createAffiliateLinkSchema.parse({ revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101" }).expiresInDays).toBe(180);
-    expect(() => createAffiliateLinkSchema.parse({ revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101", expiresInDays: 401 })).toThrow();
-    expect(() => clickEventEnvelopeSchema.parse({ eventId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101", linkId: "018f6d4d-74d4-7c18-a1d4-bb620a63b102", organizationId: "018f6d4d-74d4-7c18-a1d4-bb620a63b103", workspaceId: "018f6d4d-74d4-7c18-a1d4-bb620a63b104", occurredAt: new Date().toISOString(), method: "GET", visitorHash: "raw-ip-is-not-allowed", privacyKeyId: "v1", userAgentClass: "desktop", botReason: null })).toThrow();
+    expect(
+      createAffiliateLinkSchema.parse({ revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101" })
+        .expiresInDays,
+    ).toBe(180);
+    expect(() =>
+      createAffiliateLinkSchema.parse({
+        revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        expiresInDays: 401,
+      }),
+    ).toThrow();
+    expect(() =>
+      clickEventEnvelopeSchema.parse({
+        eventId: "018f6d4d-74d4-7c18-a1d4-bb620a63b101",
+        linkId: "018f6d4d-74d4-7c18-a1d4-bb620a63b102",
+        organizationId: "018f6d4d-74d4-7c18-a1d4-bb620a63b103",
+        workspaceId: "018f6d4d-74d4-7c18-a1d4-bb620a63b104",
+        occurredAt: new Date().toISOString(),
+        method: "GET",
+        visitorHash: "raw-ip-is-not-allowed",
+        privacyKeyId: "v1",
+        userAgentClass: "desktop",
+        botReason: null,
+      }),
+    ).toThrow();
   });
 });
