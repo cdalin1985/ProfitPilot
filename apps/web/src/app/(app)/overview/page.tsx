@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { OverviewDashboard } from "@/components/overview/overview-dashboard";
-import { getOverview } from "@/lib/data";
+import { getActiveOverview } from "@/lib/overview-context";
 
 export const metadata: Metadata = {
   title: "Overview",
@@ -10,6 +10,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage(): Promise<React.ReactNode> {
-  const overview = await getOverview();
+  const { overview } = await getActiveOverview();
   return <OverviewDashboard overview={overview} />;
 }

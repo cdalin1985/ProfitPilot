@@ -25,6 +25,7 @@ import {
 
 interface OpportunityTableProps {
   opportunities: readonly Opportunity[];
+  generatedAt: string;
 }
 
 const productImages: Readonly<Record<string, string>> = {
@@ -43,7 +44,57 @@ function networkLabel(network: Opportunity["network"]): string {
   return labels[network];
 }
 
-export function OpportunityTable({ opportunities }: OpportunityTableProps): React.ReactNode {
+function averageCommission(opportunity: Opportunity): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: opportunity.commissionCurrency,
+  }).format(opportunity.averageCommission);
+}
+
+function productImage(productName: string): string | undefined {
+  return productImages[productName];
+}
+
+function freshnessLabel(observedAt: string, generatedAt: string): string {
+  const days = Math.max(
+    0,
+    Math.floor((Date.parse(generatedAt) - Date.parse(observedAt)) / 86_400_000),
+  );
+  if (days === 0) return "Today";
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function ProductThumbnail({ index, opportunity }: { index?: number; opportunity: Opportunity }) {
+  const image = productImage(opportunity.productName);
+  return image ? (
+    <Image
+      alt={index === undefined ? opportunity.productName : ""}
+      className={
+        index === undefined ? "mx-auto size-48 object-contain" : "size-12 rounded-md object-contain"
+      }
+      height={index === undefined ? 192 : 48}
+      loading={index === 0 ? "eager" : "lazy"}
+      src={image}
+      width={index === undefined ? 192 : 48}
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      className={
+        index === undefined
+          ? "mx-auto flex size-48 items-center justify-center rounded-lg border bg-muted text-5xl font-semibold"
+          : "flex size-12 items-center justify-center rounded-md border bg-muted text-sm font-semibold"
+      }
+    >
+      {opportunity.productName.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+export function OpportunityTable({
+  generatedAt,
+  opportunities,
+}: OpportunityTableProps): React.ReactNode {
   const [selected, setSelected] = useState<Opportunity | undefined>();
 
   return (
@@ -70,17 +121,7 @@ export function OpportunityTable({ opportunities }: OpportunityTableProps): Reac
               <TableRow key={opportunity.id} className="h-[82px]">
                 <TableCell className="pl-0">
                   <div className="flex items-center gap-3">
-                    <Image
-                      alt=""
-                      className="size-12 rounded-md object-contain"
-                      height={48}
-                      loading={index === 0 ? "eager" : "lazy"}
-                      src={
-                        productImages[opportunity.productName] ??
-                        productImages["Northline Thermal Mug"]
-                      }
-                      width={48}
-                    />
+                    <ProductThumbnail index={index} opportunity={opportunity} />
                     <span className="max-w-40 whitespace-normal text-sm font-semibold leading-5">
                       {opportunity.productName}
                     </span>
@@ -91,7 +132,8 @@ export function OpportunityTable({ opportunities }: OpportunityTableProps): Reac
                   <span
                     className={opportunity.level === "high" ? "text-primary" : "text-amber-700"}
                   >
-                    {opportunity.level === "high" ? "High" : "Medium"}
+                    {opportunity.level[0]?.toUpperCase()}
+                    {opportunity.level.slice(1)}
                   </span>
                   <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
                     Score {opportunity.score}
@@ -102,20 +144,12 @@ export function OpportunityTable({ opportunities }: OpportunityTableProps): Reac
                     {opportunity.commissionRate.toFixed(2)}%
                   </span>
                   <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
-                    ${opportunity.averageCommission.toFixed(2)} avg
+                    {averageCommission(opportunity)} avg
                   </span>
                 </TableCell>
                 <TableCell>
                   <span className="block text-sm">
-                    {Math.max(
-                      1,
-                      Math.round(
-                        (Date.parse("2026-07-27T09:00:00.000Z") -
-                          Date.parse(opportunity.observedAt)) /
-                          86_400_000,
-                      ),
-                    )}{" "}
-                    day{opportunity.observedAt.startsWith("2026-07-26") ? "" : "s"} ago
+                    {freshnessLabel(opportunity.observedAt, generatedAt)}
                   </span>
                   <span
                     className={`mt-0.5 inline-flex items-center gap-1 text-xs ${
@@ -170,15 +204,7 @@ export function OpportunityTable({ opportunities }: OpportunityTableProps): Reac
                 </SheetDescription>
               </SheetHeader>
               <div className="grid gap-6 p-5">
-                <Image
-                  alt={selected.productName}
-                  className="mx-auto size-48 object-contain"
-                  height={192}
-                  src={
-                    productImages[selected.productName] ?? productImages["Northline Thermal Mug"]
-                  }
-                  width={192}
-                />
+                <ProductThumbnail opportunity={selected} />
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-t pt-5 text-sm">
                   <div>
                     <dt className="text-muted-foreground">Opportunity</dt>
@@ -190,7 +216,7 @@ export function OpportunityTable({ opportunities }: OpportunityTableProps): Reac
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Average commission</dt>
-                    <dd className="mt-1 font-semibold">${selected.averageCommission.toFixed(2)}</dd>
+                    <dd className="mt-1 font-semibold">{averageCommission(selected)}</dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Freshness</dt>

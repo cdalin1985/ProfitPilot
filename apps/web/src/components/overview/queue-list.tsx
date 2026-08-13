@@ -2,10 +2,12 @@ import { ArrowUpFromLine, ChevronRight, FileText, Link2, type LucideIcon } from 
 import Link from "next/link";
 
 import type { QueueItem } from "@profit-pilot/contracts";
-import { fixtureContentId } from "@profit-pilot/fixtures";
+
+import { relativeTime } from "@/lib/relative-time";
 
 interface QueueListProps {
   items: readonly QueueItem[];
+  generatedAt: string;
 }
 
 const queueMeta: Record<
@@ -29,22 +31,19 @@ const queueMeta: Record<
   },
 };
 
-export function QueueList({ items }: QueueListProps): React.ReactNode {
+export function QueueList({ generatedAt, items }: QueueListProps): React.ReactNode {
   return (
     <ul className="divide-y">
       {items.map((item, index) => {
         const meta = queueMeta[item.status];
         const Icon = meta.icon;
-        const href =
-          item.status === "needs_reconnect" ? "/integrations" : `/content/${fixtureContentId}`;
-
         return (
           <li key={item.id}>
             <Link
               className={`focus-outline group flex min-h-[72px] items-center gap-3 px-4 py-2 transition-colors hover:bg-muted/70 ${
                 index === 0 ? "bg-orange-50/55 ring-1 ring-inset ring-primary/50" : ""
               }`}
-              href={href}
+              href={item.href}
             >
               <span
                 className={`flex size-10 shrink-0 items-center justify-center rounded-lg border ${meta.className}`}
@@ -64,7 +63,7 @@ export function QueueList({ items }: QueueListProps): React.ReactNode {
                 </span>
               </span>
               <span className="self-start whitespace-nowrap pt-1 text-xs text-muted-foreground">
-                {index === 0 ? "30m ago" : index === 1 ? "2h ago" : "5h ago"}
+                {relativeTime(item.occurredAt, generatedAt)}
               </span>
               <ChevronRight
                 aria-hidden="true"

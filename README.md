@@ -99,7 +99,7 @@ Editorial approval and WordPress draft publication now use tenant-scoped persist
 
 Signed immutable affiliate redirects and qualified-click ingestion now run behind separate public redirect and internal ingestion boundaries. They include expiring HMAC tokens, tenant-scoped destination lookup, revocation, append-only minimized events, bot/prefetch filtering, and concurrency-safe duplicate suppression. Staging activation remains gated by the [signed-click verification runbook](docs/operations/CLICK_STAGING_VERIFICATION.md).
 
-Production overview reads, billing, and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
+The production overview is backed by tenant-scoped database reads, including PP-109 qualified-click attribution, content state, publication outcomes, current opportunities, and operational queues. Commission is explicitly unavailable until a durable affiliate-network transaction source exists. Billing and external observability remain later vertical-slice work. Production routes fail closed instead of substituting fixtures while those systems are unconfigured.
 
 ## Delivery rules
 

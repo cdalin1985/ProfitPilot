@@ -5,6 +5,7 @@ import {
   contentReviewActionResponseSchema,
   contentReviewSchema,
   problemDetailsSchema,
+  overviewSchema,
   sessionStateSchema,
   type CreateOrganizationWorkspace,
   type CreateOrganizationWorkspaceResponse,
@@ -13,6 +14,7 @@ import {
   type ContentReviewActionResponse,
   type RequestContentChanges,
   type ProblemDetails,
+  type Overview,
   type SessionState,
 } from "@profit-pilot/contracts";
 import { developmentSession } from "@profit-pilot/fixtures";
@@ -91,6 +93,15 @@ export async function getApplicationSession(
   }
   const response = await apiRequest("/v1/session", auth, { headers });
   return sessionStateSchema.parse(await response.json());
+}
+
+export async function getOverview(auth: WebAuth, workspaceId: string): Promise<Overview> {
+  if (getWebAuthMode() === "development") {
+    const { developmentOverview } = await import("@profit-pilot/fixtures");
+    return overviewSchema.parse(developmentOverview);
+  }
+  const response = await apiRequest(`/v1/workspaces/${workspaceId}/overview`, auth);
+  return overviewSchema.parse(await response.json());
 }
 
 export async function createOrganizationWorkspace(

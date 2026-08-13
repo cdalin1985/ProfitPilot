@@ -13,5 +13,6 @@ export * from "./content-generation.js";
 export * from "./content-review.js";
 export * from "./publication.js";
 export * from "./click-attribution.js";
+export * from "./overview.js";
 export * from "./tenancy.js";
 export * as schema from "./schema.js";

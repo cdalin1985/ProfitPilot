@@ -2,17 +2,17 @@ import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { fixtureContentId } from "@profit-pilot/fixtures";
-
 import { CreateContentButton } from "@/components/overview/create-content-button";
 import { ModulePage } from "@/components/module-page";
-import { getOverview } from "@/lib/data";
+import { getActiveOverview } from "@/lib/overview-context";
+import { relativeTime } from "@/lib/relative-time";
 
 export const metadata: Metadata = { title: "Content" };
 export const dynamic = "force-dynamic";
 
 export default async function ContentPage(): Promise<React.ReactNode> {
-  const overview = await getOverview();
+  const { overview } = await getActiveOverview();
+  const contentItems = overview.queue.filter((item) => item.status !== "needs_reconnect");
 
   return (
     <ModulePage
@@ -27,10 +27,10 @@ export default async function ContentPage(): Promise<React.ReactNode> {
           <span>Updated</span>
           <span className="sr-only">Open</span>
         </div>
-        {overview.queue.slice(0, 2).map((item, index) => (
+        {contentItems.map((item) => (
           <Link
             className="focus-outline grid min-h-20 grid-cols-[1fr_150px_120px_28px] items-center gap-4 rounded px-3 py-3 hover:bg-muted/55"
-            href={`/content/${fixtureContentId}`}
+            href={item.href}
             key={item.id}
           >
             <span>
@@ -41,7 +41,7 @@ export default async function ContentPage(): Promise<React.ReactNode> {
               {item.status === "needs_review" ? "In review" : "Approved"}
             </span>
             <span className="font-mono text-xs text-muted-foreground">
-              {index === 0 ? "30m ago" : "2h ago"}
+              {relativeTime(item.occurredAt, overview.generatedAt)}
             </span>
             <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
           </Link>

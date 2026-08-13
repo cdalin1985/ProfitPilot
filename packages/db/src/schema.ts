@@ -347,6 +347,11 @@ export const affiliateConnections = pgTable(
   },
   (table) => [
     index("affiliate_connections_tenant_idx").on(table.organizationId, table.workspaceId),
+    index("affiliate_connections_tenant_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.status,
+    ),
   ],
 );
 
@@ -473,6 +478,12 @@ export const opportunities = pgTable(
       table.workspaceId,
       table.score,
     ),
+    index("opportunities_tenant_product_scored_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.productId,
+      table.scoredAt.desc(),
+    ),
     uniqueIndex("opportunities_product_version_time_unique").on(
       table.productId,
       table.scoreVersion,
@@ -507,6 +518,12 @@ export const contentItems = pgTable(
       table.organizationId,
       table.workspaceId,
       table.status,
+    ),
+    index("content_items_tenant_status_updated_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.status,
+      table.updatedAt.desc(),
     ),
   ],
 );
@@ -720,6 +737,18 @@ export const publications = pgTable(
       table.workspaceId,
       table.status,
     ),
+    index("publications_tenant_revision_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.contentRevisionId,
+      table.status,
+    ),
+    index("publications_tenant_created_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.createdAt.desc(),
+      table.status,
+    ),
   ],
 );
 
@@ -796,6 +825,9 @@ export const clickEvents = pgTable(
       table.workspaceId,
       table.receivedAt,
     ),
+    index("click_events_qualified_tenant_occurred_idx")
+      .on(table.organizationId, table.workspaceId, table.occurredAt.desc())
+      .where(sql`${table.classification} = 'qualified'`),
     index("click_events_link_visitor_time_idx").on(
       table.affiliateLinkId,
       table.visitorHash,
