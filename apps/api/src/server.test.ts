@@ -7,6 +7,7 @@ import type { ApplicationServices } from "./application-services.js";
 import { loadConfig } from "./config.js";
 import type { IdentityProvider } from "./identity.js";
 import { buildServer } from "./server.js";
+import type { AwinClient } from "./awin.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -173,5 +174,31 @@ describe("API server", () => {
     expect(response.statusCode).toBe(422);
     expect(response.headers["content-type"]).toContain("application/problem+json");
     expect(createOrganizationWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("runs a tenant-authorized read-only Awin connection test", async () => {
+    const listPublishers = vi.fn(async () => [{ publisherId: 1234, name: "Northstar Media" }]);
+    const awinClient: AwinClient = { listPublishers };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      awinClient,
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/connections/awin/test`,
+      payload: { accessToken: "a-secure-connection-token" },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      provider: "awin",
+      status: "verified",
+      publishers: [{ publisherId: 1234, name: "Northstar Media" }],
+    });
+    expect(listPublishers).toHaveBeenCalledWith("a-secure-connection-token");
   });
 });

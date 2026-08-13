@@ -6,7 +6,12 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { ZodError } from "zod";
 
 import { assertCan, AuthorizationError } from "@profit-pilot/authz";
-import { createOrganizationWorkspaceSchema, identifierSchema } from "@profit-pilot/contracts";
+import {
+  awinConnectionTestResponseSchema,
+  createOrganizationWorkspaceSchema,
+  identifierSchema,
+  testAwinConnectionSchema,
+} from "@profit-pilot/contracts";
 import { checkDatabaseReady, closeDatabase } from "@profit-pilot/db";
 import { developmentContentReview, developmentOverview } from "@profit-pilot/fixtures";
 
@@ -19,6 +24,12 @@ import {
   type ApplicationServices,
 } from "./application-services.js";
 import type { ApiConfig } from "./config.js";
+import {
+  AwinAuthenticationError,
+  AwinUnavailableError,
+  createAwinClient,
+  type AwinClient,
+} from "./awin.js";
 import { IdentityProvisioningError } from "./identity-admin.js";
 import { AuthenticationError, createIdentityProvider, type IdentityProvider } from "./identity.js";
 
@@ -27,6 +38,7 @@ export interface ServerDependencies {
   identityProvider?: IdentityProvider;
   services?: ApplicationServices;
   readinessProbe?: () => Promise<void>;
+  awinClient?: AwinClient;
 }
 
 export async function buildServer({
@@ -34,6 +46,7 @@ export async function buildServer({
   identityProvider = createIdentityProvider(config),
   services = createApplicationServices(config),
   readinessProbe = config.DATABASE_URL ? checkDatabaseReady : async () => undefined,
+  awinClient = createAwinClient(),
 }: ServerDependencies): Promise<FastifyInstance> {
   const server = Fastify({
     bodyLimit: 1_048_576,
@@ -130,6 +143,27 @@ export async function buildServer({
       return reply.status(503).type("application/problem+json").send({
         type: "https://profitpilot.app/problems/dependency-unavailable",
         title: "A required service is unavailable",
+        status: 503,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof AwinAuthenticationError) {
+      return reply.status(422).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/awin-authentication-failed",
+        title: "Awin connection could not be verified",
+        status: 422,
+        detail: error.message,
+        requestId: request.id,
+      });
+    }
+
+    if (error instanceof AwinUnavailableError) {
+      request.log.warn({ err: error }, "Awin connection test unavailable");
+      return reply.status(503).type("application/problem+json").send({
+        type: "https://profitpilot.app/problems/awin-unavailable",
+        title: "Awin is temporarily unavailable",
         status: 503,
         detail: error.message,
         requestId: request.id,
@@ -268,6 +302,33 @@ export async function buildServer({
       }
 
       return developmentOverview;
+    },
+  );
+
+  server.post<{ Params: { workspaceId: string } }>(
+    "/v1/workspaces/:workspaceId/connections/awin/test",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request) => {
+      const actor = await identityProvider.authenticate(request);
+      const workspaceId = identifierSchema.parse(request.params.workspaceId);
+      const context = await services.resolveTenant(actor, workspaceId);
+      assertCan(context, "connections:manage");
+      const input = testAwinConnectionSchema.parse(request.body);
+      const publishers = await awinClient.listPublishers(input.accessToken);
+
+      return awinConnectionTestResponseSchema.parse({
+        provider: "awin",
+        status: "verified",
+        publishers,
+        verifiedAt: new Date().toISOString(),
+      });
     },
   );
 
