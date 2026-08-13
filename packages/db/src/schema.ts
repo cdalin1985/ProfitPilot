@@ -107,6 +107,19 @@ export const entitlementKey = pgEnum("entitlement_key", [
 
 export const entitlementSource = pgEnum("entitlement_source", ["stripe", "manual_beta_grant"]);
 
+export const betaInviteStatus = pgEnum("beta_invite_status", [
+  "pending",
+  "accepted",
+  "revoked",
+  "expired",
+]);
+
+export const activationRequestStatus = pgEnum("activation_request_status", [
+  "requested",
+  "approved",
+  "rejected",
+]);
+
 export const connectionStatus = pgEnum("connection_status", [
   "pending",
   "testing",
@@ -435,6 +448,64 @@ export const organizationEntitlements = pgTable(
     check(
       "organization_entitlements_limit_positive",
       sql`${table.limit} is null or ${table.limit} > 0`,
+    ),
+  ],
+);
+
+export const betaInvites = pgTable(
+  "beta_invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull(),
+    tokenDigest: text("token_digest").notNull(),
+    tokenVersion: integer("token_version").notNull().default(1),
+    status: betaInviteStatus("status").notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedByExternalIdentityId: text("accepted_by_external_identity_id"),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("beta_invites_token_digest_unique").on(table.tokenDigest),
+    index("beta_invites_email_status_idx").on(table.email, table.status),
+    check("beta_invites_email_lowercase_check", sql`${table.email} = lower(${table.email})`),
+    check("beta_invites_token_version_positive", sql`${table.tokenVersion} > 0`),
+  ],
+);
+
+export const workspaceActivationRequests = pgTable(
+  "workspace_activation_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    status: activationRequestStatus("status").notNull().default("requested"),
+    readinessSnapshot: jsonb("readiness_snapshot").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    requestFingerprint: text("request_fingerprint").notNull(),
+    decidedBy: text("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionReason: text("decision_reason"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_activation_requests_idempotency_unique").on(
+      table.organizationId,
+      table.workspaceId,
+      table.idempotencyKey,
+    ),
+    index("workspace_activation_requests_tenant_status_idx").on(
+      table.organizationId,
+      table.workspaceId,
+      table.status,
     ),
   ],
 );

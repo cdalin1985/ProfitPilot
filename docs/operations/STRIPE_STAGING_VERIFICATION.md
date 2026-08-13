@@ -14,7 +14,7 @@ store one JSON secret in AWS Secrets Manager:
 
 Configure `STRIPE_CREDENTIALS_SECRET_REFERENCE`, `STRIPE_STARTER_PRICE_ID`,
 `STRIPE_GROWTH_PRICE_ID`, and the three HTTPS return URLs. The API pins Stripe API version
-`2026-02-25.clover`. Do not put secret values in environment variables, logs, tickets, or source.
+`2026-07-29.dahlia`. Do not put secret values in environment variables, logs, tickets, or source.
 
 ## Staging contract
 

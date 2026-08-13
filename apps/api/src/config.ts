@@ -54,6 +54,7 @@ const configSchema = z
       .regex(/^[a-zA-Z0-9_-]{1,64}$/)
       .default("development"),
     CLICK_SIGNING_KEY: z.string().min(43).optional(),
+    BETA_OPERATOR_KEY: z.string().min(32).optional(),
   })
   .superRefine((value, context) => {
     if (value.NODE_ENV === "production" && value.AUTH_MODE !== "oidc") {
@@ -103,7 +104,6 @@ const configSchema = z
         message: "Production requires CLICK_SIGNING_KEY from the deployment secret manager",
       });
     }
-
     for (const key of [
       "STRIPE_CHECKOUT_SUCCESS_URL",
       "STRIPE_CHECKOUT_CANCEL_URL",
@@ -113,6 +113,13 @@ const configSchema = z
       if (value.NODE_ENV === "production" && url && new URL(url).protocol !== "https:") {
         context.addIssue({ code: "custom", path: [key], message: `${key} must use HTTPS` });
       }
+    }
+    if (value.NODE_ENV === "production" && !value.BETA_OPERATOR_KEY) {
+      context.addIssue({
+        code: "custom",
+        path: ["BETA_OPERATOR_KEY"],
+        message: "Production private beta requires BETA_OPERATOR_KEY",
+      });
     }
   });
 

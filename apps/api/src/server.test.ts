@@ -16,6 +16,7 @@ import type { PublicationService } from "./publication.js";
 import type { ClickAttributionService } from "./click-attribution.js";
 import type { OverviewService } from "./overview.js";
 import type { BillingService, EntitlementService } from "./billing.js";
+import { BetaAdmissionRequiredError, type BetaAdmissionService } from "./beta-admission.js";
 
 const testConfig = () =>
   loadConfig({ NODE_ENV: "test", AUTH_MODE: "development", LOG_LEVEL: "silent" });
@@ -44,6 +45,32 @@ function testServices(overrides: Partial<ApplicationServices> = {}): Application
         ...developmentSession.active,
         replayed: false,
       };
+    },
+    ...overrides,
+  };
+}
+
+function testBetaService(overrides: Partial<BetaAdmissionService> = {}): BetaAdmissionService {
+  return {
+    assertOperator() {},
+    async issue() {
+      throw new Error("unused");
+    },
+    async rotate() {
+      throw new Error("unused");
+    },
+    async accept() {
+      return { admitted: true, inviteId: null, acceptedAt: null };
+    },
+    async get() {
+      return { admitted: true, inviteId: null, acceptedAt: null };
+    },
+    async assertAdmitted() {},
+    async requestActivation() {
+      throw new Error("unused");
+    },
+    async activate() {
+      throw new Error("unused");
     },
     ...overrides,
   };
@@ -121,6 +148,40 @@ describe("API server", () => {
     });
     expect(response.statusCode).toBe(403);
     expect(importAwinFeed).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("blocks organization onboarding until private-beta admission", async () => {
+    const createOrganizationWorkspace = vi.fn(testServices().createOrganizationWorkspace);
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices({ createOrganizationWorkspace }),
+      betaAdmissionService: testBetaService({
+        async assertAdmitted() {
+          throw new BetaAdmissionRequiredError();
+        },
+      }),
+    });
+    const response = await server.inject({
+      method: "POST",
+      url: "/v1/onboarding/organization-workspace",
+      headers: { "idempotency-key": "018f6d4d-74d4-7c18-a1d4-bb620a63f991" },
+      payload: {
+        organizationName: "Blocked Partner",
+        workspace: {
+          name: "Blocked",
+          targetCountry: "US",
+          defaultLanguage: "en",
+          locale: "en-US",
+          currency: "USD",
+          timezone: "UTC",
+          niche: "Testing",
+        },
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(createOrganizationWorkspace).not.toHaveBeenCalled();
     await server.close();
   });
   it("creates a tenant-authorized signed affiliate link", async () => {

@@ -6,6 +6,7 @@ import {
   affiliateLinks,
   billingAccounts,
   billingWebhookEvents,
+  betaInvites,
   auditEvents,
   contentItems,
   contentGenerationRequests,
@@ -21,6 +22,7 @@ import {
   publications,
   workspaceMemberships,
   workspaceOnboardingSteps,
+  workspaceActivationRequests,
 } from "./schema.js";
 
 describe("tenant-owned database tables", () => {
@@ -43,6 +45,7 @@ describe("tenant-owned database tables", () => {
     ["workspaceMemberships", workspaceMemberships],
     ["workspaceOnboardingSteps", workspaceOnboardingSteps],
     ["organizationEntitlements", organizationEntitlements],
+    ["workspaceActivationRequests", workspaceActivationRequests],
   ])("%s carries an organization boundary", (_name, table) => {
     expect(getTableColumns(table)).toHaveProperty("organizationId");
   });
@@ -50,5 +53,10 @@ describe("tenant-owned database tables", () => {
   it("keeps pre-tenant onboarding requests scoped to an authenticated identity", () => {
     expect(getTableColumns(onboardingRequests)).toHaveProperty("externalIdentityId");
     expect(getTableColumns(onboardingRequests)).toHaveProperty("idempotencyKey");
+  });
+
+  it("keeps beta invites outside tenant rows while binding acceptance to identity", () => {
+    expect(getTableColumns(betaInvites)).toHaveProperty("tokenDigest");
+    expect(getTableColumns(betaInvites)).toHaveProperty("acceptedByExternalIdentityId");
   });
 });

@@ -262,6 +262,58 @@ export const billingContextSchema = z.object({
 });
 export type BillingContext = z.infer<typeof billingContextSchema>;
 
+export const acceptBetaInviteSchema = z.object({
+  token: z
+    .string()
+    .trim()
+    .min(32)
+    .max(512)
+    .regex(/^[A-Za-z0-9_-]+$/),
+});
+
+export const createBetaInviteSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  expiresInDays: z.number().int().min(1).max(30).default(7),
+});
+
+export const betaInviteSchema = z.object({
+  id: identifierSchema,
+  email: z.string().email(),
+  status: z.enum(["pending", "accepted", "revoked", "expired"]),
+  expiresAt: z.string().datetime(),
+  acceptedAt: z.string().datetime().nullable(),
+});
+
+export const issuedBetaInviteSchema = betaInviteSchema.extend({
+  token: z.string().min(32),
+});
+
+export const betaAdmissionSchema = z.object({
+  admitted: z.boolean(),
+  inviteId: identifierSchema.nullable(),
+  acceptedAt: z.string().datetime().nullable(),
+});
+
+export const activationRequestSchema = z.object({
+  id: identifierSchema,
+  organizationId: identifierSchema,
+  workspaceId: identifierSchema,
+  status: z.enum(["requested", "approved", "rejected"]),
+  readiness: z.object({
+    ready: z.boolean(),
+    checks: z.record(z.string(), z.boolean()),
+  }),
+  requestedAt: z.string().datetime(),
+  decidedAt: z.string().datetime().nullable(),
+});
+
+export type AcceptBetaInvite = z.infer<typeof acceptBetaInviteSchema>;
+export type CreateBetaInvite = z.infer<typeof createBetaInviteSchema>;
+export type BetaInvite = z.infer<typeof betaInviteSchema>;
+export type IssuedBetaInvite = z.infer<typeof issuedBetaInviteSchema>;
+export type BetaAdmission = z.infer<typeof betaAdmissionSchema>;
+export type ActivationRequest = z.infer<typeof activationRequestSchema>;
+
 export const opportunityLevelSchema = z.enum(["high", "medium", "low"]);
 export const freshnessTrendSchema = z.enum(["rising", "new", "steady", "falling"]);
 

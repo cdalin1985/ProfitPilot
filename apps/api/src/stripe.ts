@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { z } from "zod";
 
-export const STRIPE_API_VERSION = "2026-02-25.clover";
+export const STRIPE_API_VERSION = "2026-07-29.dahlia";
 
 const hostedSessionSchema = z.object({ id: z.string().min(1), url: z.string().url() });
 

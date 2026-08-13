@@ -19,6 +19,7 @@ describe("API configuration", () => {
       ALLOWED_ORIGINS: "https://app.example.com",
       DATABASE_URL: "postgresql://application:secret@database.example.com:5432/profit_pilot",
       CLICK_SIGNING_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      BETA_OPERATOR_KEY: "a-private-beta-operator-key-with-32-characters",
     });
 
     expect(config.AUTH_MODE).toBe("oidc");
