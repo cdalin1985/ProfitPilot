@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedActor } from "@profit-pilot/contracts";
-import { developmentSession } from "@profit-pilot/fixtures";
+import { developmentContentReview, developmentSession } from "@profit-pilot/fixtures";
 
 import type { ApplicationServices } from "./application-services.js";
 import type { ContentGenerationService } from "./content-generation.js";
+import type { ContentReviewService } from "./content-review.js";
 import { loadConfig } from "./config.js";
 import type { IdentityProvider } from "./identity.js";
 import { buildServer } from "./server.js";
@@ -321,6 +322,81 @@ describe("API server", () => {
     expect(createDraft).toHaveBeenCalledWith(
       developmentSession.tenant,
       expect.objectContaining({ contentType: "article", locale: "en-US" }),
+      idempotencyKey,
+    );
+  });
+
+  it("reads a tenant-scoped persisted content review", async () => {
+    const get = vi.fn(async () => developmentContentReview);
+    const contentReviewService: ContentReviewService = {
+      get,
+      async requestChanges() {
+        throw new Error("unused");
+      },
+      async approve() {
+        throw new Error("unused");
+      },
+    };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      contentReviewService,
+    });
+
+    const response = await server.inject({
+      method: "GET",
+      url: `/v1/content/${developmentContentReview.id}`,
+      headers: { "x-workspace-id": developmentSession.tenant.workspaceId },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().revisionId).toBe(developmentContentReview.revisionId);
+    expect(get).toHaveBeenCalledWith(developmentSession.tenant, developmentContentReview.id);
+  });
+
+  it("records an idempotent approval against the current revision", async () => {
+    const approve = vi.fn(async () => ({
+      contentId: developmentContentReview.id,
+      revisionId: developmentContentReview.revisionId,
+      actionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b299",
+      action: "approved" as const,
+      status: "approved" as const,
+      actedAt: "2026-08-05T12:00:00.000Z",
+      replayed: false,
+    }));
+    const contentReviewService: ContentReviewService = {
+      async get() {
+        return developmentContentReview;
+      },
+      async requestChanges() {
+        throw new Error("unused");
+      },
+      approve,
+    };
+    const server = await buildServer({
+      config: testConfig(),
+      identityProvider: testIdentityProvider,
+      services: testServices(),
+      contentReviewService,
+    });
+    const idempotencyKey = "018f6d4d-74d4-7c18-a1d4-bb620a63f299";
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v1/workspaces/${developmentSession.tenant.workspaceId}/content/${developmentContentReview.id}/review/approve`,
+      headers: { "idempotency-key": idempotencyKey },
+      payload: { revisionId: developmentContentReview.revisionId },
+    });
+    await server.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().status).toBe("approved");
+    expect(approve).toHaveBeenCalledWith(
+      developmentSession.tenant,
+      developmentContentReview.id,
+      { revisionId: developmentContentReview.revisionId },
       idempotencyKey,
     );
   });

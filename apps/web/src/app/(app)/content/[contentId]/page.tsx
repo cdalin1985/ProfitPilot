@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { can } from "@profit-pilot/authz";
+
 import { ContentReviewWorkspace } from "@/components/content/content-review-workspace";
-import { getContentReview } from "@/lib/data";
+import { getActiveWorkspaceSession } from "@/lib/active-session";
+import { requireWebAuth } from "@/lib/auth";
+import { getContentReview } from "@/lib/profit-pilot-api";
 
 export const metadata: Metadata = {
   title: "Content review",
@@ -18,11 +22,16 @@ export default async function ContentReviewPage({
   params,
 }: ContentReviewPageProps): Promise<React.ReactNode> {
   const { contentId } = await params;
-  const content = await getContentReview(contentId);
+  const auth = await requireWebAuth();
+  const session = await getActiveWorkspaceSession(auth);
+  if (session.status !== "active") notFound();
+  const content = await getContentReview(auth, session.tenant.workspaceId, contentId);
 
   if (!content) {
     notFound();
   }
 
-  return <ContentReviewWorkspace content={content} />;
+  return (
+    <ContentReviewWorkspace canReview={can(session.tenant, "content:approve")} content={content} />
+  );
 }

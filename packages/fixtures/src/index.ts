@@ -159,6 +159,7 @@ export const developmentOverview: Overview = {
 
 export const developmentContentReview: ContentReview = {
   id: fixtureContentId,
+  revisionId: "018f6d4d-74d4-7c18-a1d4-bb620a63b204",
   title: "Best Insulated Mugs for Commuters",
   status: "in_review",
   revision: 4,
