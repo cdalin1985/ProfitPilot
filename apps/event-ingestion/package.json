@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@fastify/helmet": "13.1.0",
-    "@fastify/rate-limit": "11.1.0",
+    "@fastify/rate-limit": "11.2.0",
     "@profit-pilot/contracts": "workspace:*",
     "@profit-pilot/db": "workspace:*",
     "fastify": "5.10.0",
