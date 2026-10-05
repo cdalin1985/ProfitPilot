@@ -29,7 +29,7 @@
     "postgres": "catalog:"
   },
   "devDependencies": {
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
